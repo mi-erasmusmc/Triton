@@ -1,0 +1,25 @@
+Package: Triton
+Type: Package
+Title: Generating Text Representation Features for a Cohort in the OMOP CDM
+Version: 0.1.0
+Author: c(person("Tom", "Seinen", "t.seinen@erasmusmc.nl", role = c("aut", "cre")))
+Maintainer: Tom M. Seinen <t.seinen@erasmusmc.nl>
+Description: An R package for generating text representations as features(covariates) for a cohort using data in the OMOP Common Data Model.
+License: Apache License 2.0
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.1.0
+Imports:
+  magrittr,
+  dplyr,
+  stringr,
+  stringi,
+  utils,
+  tidytext,
+  quanteda,
+  tm
+Suggests:
+  spacyr,
+  udpipe,
+  sentencepiece
+  
