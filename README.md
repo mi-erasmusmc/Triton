@@ -65,7 +65,7 @@ triton_covariateSettings <- createTextRepCovariateSettings(
   representations=c("tfidf"))
 ```
 
-The R script file [extras/Run_TRITON.r](https://github.com/mi-erasmusmc/TextRepresentationExtraction/blob/master/extras/Run_TRITON.R) contains a more eleborate example.
+The R script file [extras/Run_TRITON.r](https://github.com/mi-erasmusmc/Triton/blob/master/extras/Run_TRITON.R) contains a more eleborate example.
 
 ## Good to know
 - The analysisId for the generated covariates is 999.
