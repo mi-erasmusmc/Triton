@@ -32,7 +32,7 @@ createTextRepCovariateSettings(
 
 \item{endDay}{integer; end day before the index date for with the text representations have to be computed.}
 
-\item{preprocessor_function}{function; to preprocess the stings before tokenization. Default is \code{\link[base]{tolower}}.}
+\item{preprocessor_function}{function; to preprocess the stings before tokenization. Default is \code{\link{tolower}}.}
 
 \item{tokenizer_function}{character or function; to tokenize the strings. Default is quanteda tokenizer (\code{\link[quanteda]{tokens}}), with argument "word". Other possible arguments are "fasterword", "fastestword", "sentence", and "character". It is also possible to provide a custom tokenizer function. This function should take the document strings as input and should return a list of character vectors (tokens).}
 

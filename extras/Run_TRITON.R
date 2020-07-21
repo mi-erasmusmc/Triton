@@ -5,6 +5,10 @@ library(Triton)
 # enough java ram for sql query import, increase it for larger queries
 options(java.parameters = "-Xmx8000m")
 
+# Optional: Set output folder for saving vocabulary
+outputFolder <-paste0(getwd(),"/output")
+dir.create(outputFolder, showWarnings = FALSE) # Create folder if does not exist
+
 #=========================================================
 # Creating custom preprocessor and tokenizer functions
 #=========================================================
@@ -68,10 +72,6 @@ connectionDetails <- createConnectionDetails(
   password = "",
   port = 0)
 
-# Optional: Set output folder for saving vocabulary
-outputFolder <-paste0(getwd(),"/output")
-dir.create(outputFolder, showWarnings = FALSE)
-
 # The database schema containing the OMOP CDM data
 cdmDatabaseSchema <- ""
 # The database schema with the cohort tables
@@ -90,7 +90,7 @@ covariateData <- FeatureExtraction::getDbCovariateData(
   cohortDatabaseSchema = cohortDatabaseSchema,
   cohortTable = cohortTable,
   cohortId = cohortId,
-  rowIdField = "subject_id",
+  rowIdField = rowIdField,
   covariateSettings = TextRep_CovSet)
 
 # Inspect the covariateData object:

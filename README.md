@@ -23,7 +23,7 @@ Requires R (version 3.6.0 or higher). Installation on Windows requires RTools.
 ## Installation
 The package is easily installed using devtools.
 ````
-install_github("mi-erasmusmc/Triton")
+devtools::install_github("mi-erasmusmc/Triton")
 ````
 Altenatively, this repository is cloned or downloaded to a local machine, then the package is manually build in R.
 

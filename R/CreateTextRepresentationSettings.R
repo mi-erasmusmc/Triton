@@ -6,7 +6,7 @@
 #' @param useTextData logical; option to disable the creation of text representation covariates.
 #' @param startDay integer; start day before the index date for with the text representations have to be computed.
 #' @param endDay integer; end day before the index date for with the text representations have to be computed.
-#' @param preprocessor_function function; to preprocess the stings before tokenization. Default is \code{\link[base]{tolower}}.
+#' @param preprocessor_function function; to preprocess the stings before tokenization. Default is \code{\link{tolower}}.
 #' @param tokenizer_function character or function; to tokenize the strings. Default is quanteda tokenizer (\code{\link[quanteda]{tokens}}), with argument "word". Other possible arguments are "fasterword", "fastestword", "sentence", and "character". It is also possible to provide a custom tokenizer function. This function should take the document strings as input and should return a list of character vectors (tokens).
 #' @param custom_pruning_regex (optional) character; regular expression (regex) that selects tokens that will be removed. Default is \code{NULL}.
 #' @param stopwords character vector; of list of stopwords that will be removed. Default is NULL. See \code{\link[stopwords]{stopwords}} for generating stopwords.
