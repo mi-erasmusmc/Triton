@@ -41,7 +41,8 @@ createTextRepCovariateSettings <- function(useTextData = TRUE,
                                         doc_proportion_min=0.001,
                                         dictionaryVocabIds=NULL,
                                         representations=c("tfidf"),
-                                        vocabFile=NULL) {
+                                        vocabFile=NULL,
+                                        SimulationIdsWithOutcome=NULL) {
   covariateSettings <- list(useTextData = useTextData,
                             startDay=startDay,
                             endDay=endDay,
@@ -59,7 +60,8 @@ createTextRepCovariateSettings <- function(useTextData = TRUE,
                             dictionaryVocabIds=dictionaryVocabIds,
                             custom_pruning_regex=custom_pruning_regex,
                             representations=representations,
-                            vocabFile=vocabFile)
+                            vocabFile=vocabFile,
+                            SimulationIdsWithOutcome=SimulationIdsWithOutcome)
   attr(covariateSettings, "fun") <- "getTextRepCovariateData"
   class(covariateSettings) <- "covariateSettings"
   return(covariateSettings)
