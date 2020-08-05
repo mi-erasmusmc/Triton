@@ -1,6 +1,6 @@
 # TRITON: Text Represented In Terms Of Numeric-features
 
-**UNDER ACTIVE DEVELOPMENT. DO NOT USE.**
+**UNDER ACTIVE DEVELOPMENT. USE WITH CARE.**
 
 A covariate builder that constructs text representation covariates for a cohort in the OMOP common data model. The constructed covariateData can be used within the OHDSI framework: [HADES](https://ohdsi.github.io/Hades/), such as the [patient-level prediction package](https://github.com/OHDSI/PatientLevelPrediction).
 
@@ -13,6 +13,15 @@ This covariate builder is an extension to the [FeatureExtraction package](https:
 - TRITON provides a customizable natural language processing pipeline.
 - The full NLP pipeline is stored within the covariateSettings object making the process **transparent** and **reproducable**.
 - The NLP pipeline is language independent.
+
+Implemented text representations:
+- Word counts/term frequencies (tf)
+- Term frequency–inverse document frequency 
+
+Future implementations:
+- Topic models (LDA)
+- Word embeddings (GLoVE/FastText)
+- Document embeddings as combined word embeddings (docGLoVE/docFastText)
 
 ## Technology
 TRITON is an R package. For the NLP pipeline it makes primarily use of the functions in [Quanteda](https://github.com/quanteda/quanteda/), an R package for managing and analyzing text (created by [Kenneth Benoit](https://kenbenoit.net/)).
