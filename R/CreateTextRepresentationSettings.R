@@ -43,8 +43,7 @@ createTextRepCovariateSettings <- function(useTextData = TRUE,
                                         dictionaryVocabIds=NULL,
                                         representations=c("tfidf"),
                                         outcomeFolder=NULL,
-                                        saveVocab=FALSE,
-                                        SimulationIdsWithOutcome=NULL) {
+                                        saveVocab=FALSE) {
 
   if(saveVocab & is.null(outcomeFolder)) stop("specify the outcomeFolder to save the vocab")
 
@@ -66,8 +65,7 @@ createTextRepCovariateSettings <- function(useTextData = TRUE,
                             custom_pruning_regex=custom_pruning_regex,
                             representations=representations,
                             outcomeFolder=outcomeFolder,
-                            saveVocab=saveVocab,
-                            SimulationIdsWithOutcome=SimulationIdsWithOutcome)
+                            saveVocab=saveVocab)
   attr(covariateSettings, "fun") <- "getTextRepCovariateData"
   class(covariateSettings) <- "covariateSettings"
   return(covariateSettings)

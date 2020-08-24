@@ -73,27 +73,6 @@ getTextRepCovariateData <- function(connection,
   notes<-Triton:::ImportNotes(connection, sqlquery, rowIdField)
   colnames(notes)<-c("rowId","noteText")
 
-  if(!is.null(cs$SimulationIdsWithOutcome)){
-    ids<-cs$SimulationIdsWithOutcome
-    nids<-length(ids)
-    simSeventyfive<-sample(ids,round(nids*0.75))
-    simFifty<-sample(ids,round(nids*0.5))
-    simTwentyfive<-sample(ids,round(nids*0.25))
-    simTen<-sample(ids,round(nids*0.1))
-
-    notes <- notes %>%
-      mutate(noteText= case_when(rowId %in% ids ~ paste(noteText, "simHunderd", stringi::stri_rand_strings(1, 5, pattern = "[a-z]")),
-                                 TRUE ~ noteText)) %>%
-      mutate(noteText= case_when(rowId %in% simSeventyfive ~ paste(noteText, "simSeventyfive", stringi::stri_rand_strings(1, 5, pattern = "[a-z]")),
-                                 TRUE ~ noteText)) %>%
-      mutate(noteText= case_when(rowId %in% simFifty ~ paste(noteText, "simFifty", stringi::stri_rand_strings(1, 5, pattern = "[a-z]")),
-                                 TRUE ~ noteText)) %>%
-      mutate(noteText= case_when(rowId %in% simTwentyfive ~ paste(noteText, "simTwentyfive", stringi::stri_rand_strings(1, 5, pattern = "[a-z]")),
-                                 TRUE ~ noteText)) %>%
-      mutate(noteText= case_when(rowId %in% simTen ~ paste(noteText, "simTen", stringi::stri_rand_strings(1, 5, pattern = "[a-z]")),
-                                 TRUE ~ noteText))
-  }
-
   ### 2.2 Preprocessing the notes ###
   writeLines("\tPreprocessing notes")
   notes_processed <- notes %>%
