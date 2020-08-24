@@ -7,7 +7,7 @@ ImportNotes<- function(connection, sqlquery, rowIdField){
   writeLines(paste0("\t\tNumber of notes: ",notes.shape[1],", Memory size: ",format(utils::object.size(notes), units = "auto")))
   notes<-notes%>%
     dplyr::group_by_at(SqlRender::snakeCaseToCamelCase(rowIdField)) %>%
-    dplyr::summarise(noteText = paste0(noteText, collapse = " ")) %>%
+    dplyr::summarise(noteText = paste0(noteText, collapse = " nextnote ")) %>%
     dplyr::mutate(noteText = stringr::str_replace(noteText, "(^NA$)|((NA )+NA)", "NA")) %>%
     dplyr::na_if("NA")
   notes.shape<-dim(notes)
@@ -24,7 +24,7 @@ CreateTextStats<-function(tokens){
 }
 
 toCovariateData<- function(dtm, repName, startDay, endDay, idstaken, sql){
-  ##==## Converts Text2Vec DTM to FeatureExtraction covariate object ##==##
+  ##==## Converts sparse long format DTM to FeatureExtraction covariate object ##==##
   strWd<-paste0(" (",startDay," to ",endDay," days)")
   covariates_allCols<-dtm %>%
     dplyr::select(rowId, word, repName) %>%
