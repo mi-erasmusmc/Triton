@@ -32,7 +32,7 @@ getTextRepCovariateData <- function(connection,
   }
 
   t1 <- proc.time() #Start timer
-  quanteda::quanteda_options(threads=2) #Must be set as an option
+  #quanteda::quanteda_options(threads=2) #Must be set as an option
   cs<-covariateSettings #shorten name
 
   ### Check what covariate types need to be constructed ###
@@ -72,6 +72,27 @@ getTextRepCovariateData <- function(connection,
                               endDay)
   notes<-Triton:::ImportNotes(connection, sqlquery, rowIdField)
   colnames(notes)<-c("rowId","noteText")
+
+  if(!is.null(cs$SimulationIdsWithOutcome)){
+    ids<-cs$SimulationIdsWithOutcome
+    nids<-length(ids)
+    simSeventyfive<-sample(ids,round(nids*0.75))
+    simFifty<-sample(ids,round(nids*0.5))
+    simTwentyfive<-sample(ids,round(nids*0.25))
+    simTen<-sample(ids,round(nids*0.1))
+
+    notes <- notes %>%
+      mutate(noteText= case_when(rowId %in% ids ~ paste(noteText, "simHunderd", stringi::stri_rand_strings(1, 5, pattern = "[a-z]")),
+                                 TRUE ~ noteText)) %>%
+      mutate(noteText= case_when(rowId %in% simSeventyfive ~ paste(noteText, "simSeventyfive", stringi::stri_rand_strings(1, 5, pattern = "[a-z]")),
+                                 TRUE ~ noteText)) %>%
+      mutate(noteText= case_when(rowId %in% simFifty ~ paste(noteText, "simFifty", stringi::stri_rand_strings(1, 5, pattern = "[a-z]")),
+                                 TRUE ~ noteText)) %>%
+      mutate(noteText= case_when(rowId %in% simTwentyfive ~ paste(noteText, "simTwentyfive", stringi::stri_rand_strings(1, 5, pattern = "[a-z]")),
+                                 TRUE ~ noteText)) %>%
+      mutate(noteText= case_when(rowId %in% simTen ~ paste(noteText, "simTen", stringi::stri_rand_strings(1, 5, pattern = "[a-z]")),
+                                 TRUE ~ noteText))
+  }
 
   ### 2.2 Preprocessing the notes ###
   writeLines("\tPreprocessing notes")
@@ -151,15 +172,19 @@ getTextRepCovariateData <- function(connection,
   }
 
   ## 2.4.3 save the vocabulary if requested ##
-  if(!is.null(cs$vocabFile)){
+  if(cs$saveVocab){
     vocab<-quanteda::textstat_frequency(notes_dfm_trimmed)
-    saveRDS(vocab, file = cs$vocabFile)
+    saveRDS(vocab, file = paste0(cs$outputFolder,"/vocabfile.rds"))
   }
 
   #========= 3. Build the covariates =========#
 
-  covariates<-NULL # start with empty set
+  covariates<-NULL # start with empty covariate set
   idstaken<-NULL # start with no ids taken, for assigning unique random ids
+
+  ### 3.0 Build general text statistics
+  # TODO
+
 
   ### 3.1  Build the TF covariates (Using DTM) ###
   if("tf" %in% textrep){
@@ -179,6 +204,36 @@ getTextRepCovariateData <- function(connection,
     covariates <- appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
+
+  ### 3.3 Build the LDA topic model covariates (Using DTM) ###
+  if("LDA" %in% textrep){
+    writeLines("\tCreating LDA topic model covariates")
+    dtm_tp <- quanteda::convert(notes_dfm_trimmed, to = "topicmodels")
+    lda <- topicmodels::LDA(dtm_tp, k = 100, control = list(seed = 1234))
+    saveRDS(lda, file = "ldaModel")
+    DTM_LDA <- tidytext::tidy(lda, matrix = "gamma") %>%
+      dplyr::rename(rowId=document, word=topic, lda=gamma) %>%
+      dplyr::mutate(word=paste0("topic",word))
+    tempCovariates <- toCovariateData(DTM_LDA, "lda", startDay,endDay,idstaken,sqlquery)
+    covariates <- appendCovariateData(tempCovariates,covariates)
+    idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
+  }
+
+  ### 3.4 Build the STM topic model covariates (Using DTM) ###
+  if("STM" %in% textrep){
+    writeLines("\tCreating STM topic model covariates")
+    stm <- stm(notes_dfm_trimmed, K = 100, verbose = TRUE, init.type = "Spectral")
+    saveRDS(stm, file = "stmModel")
+    DTM_STM <- tidytext::tidy(stm, matrix = "gamma") %>%
+      dplyr::rename(rowId=document, word=topic, lda=gamma) %>%
+      dplyr::mutate(word=paste0("topic",word))
+    tempCovariates <- toCovariateData(DTM_LDA, "lda", startDay,endDay,idstaken,sqlquery)
+    covariates <- appendCovariateData(tempCovariates,covariates)
+    idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
+  }
+
+  ### 3.5 Document embedding (using DTM and Word embedding)
+  #TODO
 
   writeLines(paste0("Done, total time: ",(proc.time() - t1)[3]," secs"))
 

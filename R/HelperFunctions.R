@@ -36,16 +36,15 @@ getUniqueId<-function(Names, idstaken){
   uniqueNames<-as.data.frame(unique(Names))
   colnames(uniqueNames)<-"name"
   ## generate the ids
-  #uniqueNames$ids<-strtoi(substr(data.table::transpose(base::strsplit(uuid::UUIDgenerate(n=nrow(uniqueNames)),split = "-"))[[1]],1,7), base = 16)
   uniqueNames$ids<-as.integer(paste0((as.integer(runif(n=nrow(uniqueNames),min = 0,max = 2147482))),999))
+  ## change the ids if duplicated or taken
   while ((length(uniqueNames$ids[duplicated(uniqueNames$ids)])>0) || (!all(is.na(match(uniqueNames$ids,idstaken))))) {
-    #print(paste0("duplicated:",length(uniqueNames$ids[duplicated(uniqueNames$ids)])))
-    #print(paste0("taken:",length(uniqueNames$ids[!is.na(match(uniqueNames$ids,idstaken))])))
-    dubs<-duplicated(uniqueNames$ids)
-    taken<-!is.na(match(uniqueNames$ids,idstaken))
-    both<-dubs | taken
-    #uniqueNames$ids[both]<-strtoi(substr(data.table::transpose(base::strsplit(uuid::UUIDgenerate(n=length(both[both])),split = "-"))[[1]],1,7), base = 16)
-    uniqueNames$ids[both]<-as.integer(paste0((as.integer(runif(n=length(both[both]),min = 0,max = 2147482))),999))
+    #print(paste0("duplicated:",length(uniqueNames$ids[duplicated(uniqueNames$ids)]))) #Debug
+    #print(paste0("taken:",length(uniqueNames$ids[!is.na(match(uniqueNames$ids,idstaken))]))) #Debug
+    dubs<-duplicated(uniqueNames$ids) # duplicated ids
+    taken<-!is.na(match(uniqueNames$ids,idstaken)) # ids that are already taken
+    both<-dubs | taken # combine both
+    uniqueNames$ids[both]<-as.integer(paste0((as.integer(runif(n=length(both[both]),min = 0,max = 2147482))),999)) # create new id for those
   }
   Names<-dplyr::left_join(Names,uniqueNames,by = "name")
   return(Names$ids)

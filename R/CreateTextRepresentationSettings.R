@@ -20,7 +20,8 @@
 #' @param doc_proportion_min numeric; minimum proportion (0.-1.) of documents which should contain term.
 #' @param representations character vector; of text representations that should be constructed, chose from \code{"tf"} and \code{"tfidf"}. Multiple representations can be constructed at once: \code{c("tf","tfidf")}.
 #' @param dictionaryVocabIds (optional) integer vector; of omop cdm vocabulary ids that are used for dictionary matching. Set to \code{NULL}(default) to turn off dictionary matching.
-#' @param vocabFile (optional) character; file path and name for saving the vocabulary. Default is \code{NULL}.
+#' @param outcomeFolder (optional) character; file path and name for saving output files. Default is \code{NULL}.
+#' @param saveVocab logica; option to save the generated vocabulary as rds file in the outputFolder.
 #' @return covariateSettings object, that can be used by the OHDSI FeatureExtraction package.
 #' @export
 
@@ -41,7 +42,12 @@ createTextRepCovariateSettings <- function(useTextData = TRUE,
                                         doc_proportion_min=0.001,
                                         dictionaryVocabIds=NULL,
                                         representations=c("tfidf"),
-                                        vocabFile=NULL) {
+                                        outcomeFolder=NULL,
+                                        saveVocab=FALSE,
+                                        SimulationIdsWithOutcome=NULL) {
+
+  if(saveVocab & is.null(outcomeFolder)) stop("specify the outcomeFolder to save the vocab")
+
   covariateSettings <- list(useTextData = useTextData,
                             startDay=startDay,
                             endDay=endDay,
@@ -59,7 +65,9 @@ createTextRepCovariateSettings <- function(useTextData = TRUE,
                             dictionaryVocabIds=dictionaryVocabIds,
                             custom_pruning_regex=custom_pruning_regex,
                             representations=representations,
-                            vocabFile=vocabFile)
+                            outcomeFolder=outcomeFolder,
+                            saveVocab=saveVocab,
+                            SimulationIdsWithOutcome=SimulationIdsWithOutcome)
   attr(covariateSettings, "fun") <- "getTextRepCovariateData"
   class(covariateSettings) <- "covariateSettings"
   return(covariateSettings)

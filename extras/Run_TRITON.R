@@ -24,12 +24,20 @@ custom_preprocessing<-function(string){
 #=== Custom tokenizer function example ===#
 custom_tokenizer <- function(strings) {
   res <- stringi::stri_split_boundaries(as.matrix(strings), type = "word",skip_word_none = TRUE) # Split the sentences into words
+  names(res)<-names(strings)
   return(res)
 }
 
 #== Optional: Test your preprocessing and tokenization functions ==#
-text<-c("Patient: 1: has fever and\n headache?<>)(", "Patient 2: has___diabetes")
+text<-c("Patient: 112: has fever and\n headache?<>)(", "Patient 2: has___diabetes")
+names(text)<-c("doc1","doc2")
 custom_tokenizer(unlist(lapply(text, custom_preprocessing)))
+#Output should be a (named) list of character vectors:
+# $doc1
+# [1] "patient"  "has"      "fever"    "and"      "headache"
+#
+# $doc2
+# [1] "patient"  "has"      "diabetes"
 
 #===============================================
 #  Create the text representation settings
@@ -50,9 +58,10 @@ triton_covariateSettings <- Triton::createTextRepCovariateSettings(
   doc_count_max = Inf,
   doc_proportion_max = 0.5,
   doc_proportion_min = 0.005,
-  dictionaryVocabIds=NULL, # Provide cdm vocabulary ids to perform Dictionary search, otherwise NULL.
-  representations=c("tf","tfidf"), # list of representations to be generated
-  vocabFile = paste0(outputFolder,"/","vocab")) # Provide location and name to save vocab, otherwise NULL.
+  dictionaryVocabIds = NULL, # Provide cdm vocabulary ids to perform Dictionary search, otherwise NULL.
+  representations = c("tf","tfidf"), # list of representations to be generated
+  outputFolder = outputFolder, # Provide output location and to save vocab and other info, otherwise NULL.
+  saveVocab = TRUE)
 
 # The triton_covariateSettings can now be used within the OHDSI framework.
 # For example in the PatientLevelPrediction package.
