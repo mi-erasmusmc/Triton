@@ -1,4 +1,4 @@
-# TRITON: Text Represented In Terms Of Numeric-features
+# 🧜‍♂️ TRITON: Text Represented In Terms Of Numeric-features
 
 **UNDER ACTIVE DEVELOPMENT. USE WITH CARE.**
 
