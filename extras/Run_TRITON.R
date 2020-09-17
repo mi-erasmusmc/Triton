@@ -9,6 +9,7 @@ options(java.parameters = "-Xmx8000m")
 outputFolder <-paste0(getwd(),"/output")
 dir.create(outputFolder, showWarnings = FALSE) # Create folder if does not exist
 
+
 #=========================================================
 # Creating custom preprocessor and tokenizer functions
 #=========================================================
@@ -39,6 +40,7 @@ custom_tokenizer(unlist(lapply(text, custom_preprocessing)))
 # $doc2
 # [1] "patient"  "has"      "diabetes"
 
+
 #===============================================
 #  Create the text representation settings
 #===============================================
@@ -49,7 +51,7 @@ triton_covariateSettings <- Triton::createTextRepCovariateSettings(
   preprocessor_function = custom_preprocessing,
   tokenizer_function = custom_tokenizer,
   stopwords = stopwords::stopwords("en"),
-  custom_pruning_regex = "(-+)|(hydro[a-z]+)", # remove all minus signs and all words starting with "hydro" (example)
+  custom_pruning_regex = "(-+)|(hydro[a-z]+)", # (example) remove all minus signs and all words starting with "hydro"
   ngrams = 1:2,
   vocab_term_max = Inf,
   term_count_min = 50,
@@ -66,12 +68,13 @@ triton_covariateSettings <- Triton::createTextRepCovariateSettings(
 # The triton_covariateSettings can now be used within the OHDSI framework.
 # For example in the PatientLevelPrediction package.
 
-# To construct the covariates and create a covariateData object use the
-# getDbCovariateData function in the FeatureExtraction package.
 
 #===========================================================================
 # Construct the covariates using FeatureExtraction package from a CDM cohort
 #===========================================================================
+
+# To construct the covariates and create a covariateData object use the
+# getDbCovariateData function in the FeatureExtraction package.
 
 # Creat database connection details
 connectionDetails <- createConnectionDetails(
@@ -100,7 +103,7 @@ covariateData <- FeatureExtraction::getDbCovariateData(
   cohortTable = cohortTable,
   cohortId = cohortId,
   rowIdField = rowIdField,
-  covariateSettings = TextRep_CovSet)
+  covariateSettings = triton_covariateSettings) # The created covariate settings object
 
 # Inspect the covariateData object:
 inspectData<-as.data.frame(covariateData$covariates)

@@ -28,7 +28,7 @@ toCovariateData<- function(dtm, repName, startDay, endDay, idstaken, sql){
   strWd<-paste0(" (",startDay," to ",endDay," days)")
   covariates_allCols<-dtm %>%
     dplyr::select(rowId, word, repName) %>%
-    dplyr::mutate(covariate_name=paste0(repName," ",word,strWd))%>%
+    dplyr::mutate(covariate_name=paste0(repName,strWd," : ",word))%>%
     dplyr::rename(row_id=rowId, covariate_value=repName)%>%
     dplyr::mutate(row_id=as.numeric(row_id),
            covariate_name=as.factor(covariate_name))
