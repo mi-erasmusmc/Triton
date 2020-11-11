@@ -31,8 +31,8 @@ getTextRepCovariateData <- function(connection,
     return(NULL)
   }
 
-  t1 <- proc.time() #Start timer
-  #quanteda::quanteda_options(threads=2) #Must be set as an option
+  t1 <- Sys.time() #Start timer
+  quanteda::quanteda_options(threads=max(2,parallel::detectCores())) #Must be set as an option
   cs<-covariateSettings #shorten name
 
   ### Check what covariate types need to be constructed ###
@@ -58,7 +58,7 @@ getTextRepCovariateData <- function(connection,
 
   #========= 2. Run Feature Contruction =========#
 
-  writeLines(paste0("Constructing '",paste(textrep,collapse = ", "),"' covariates, during day '",startDay,
+  ParallelLogger::logInfo(paste0("Constructing '",paste(textrep,collapse = ", "),"' covariates, during day '",startDay,
                    "' through '",endDay,"' days relative to index."))
 
   ### 2.1 Import the cohort's notes from OMOP CDM ###
@@ -74,21 +74,23 @@ getTextRepCovariateData <- function(connection,
   colnames(notes)<-c("rowId","noteText")
 
   ### 2.2 Preprocessing the notes ###
-  writeLines("\tPreprocessing notes")
-  notes_processed <- notes %>%
-    dplyr::mutate(noteText = cs$preprocessor_function(noteText))
+  ParallelLogger::logInfo("\tPreprocessing notes")
+  # notes <- notes %>%
+  #   dplyr::mutate(noteText = cs$preprocessor_function(noteText))
+  notes$noteText <- unlist(pbapply::pblapply(notes$noteText, custom_preprocessing))
 
   ### 2.3 Tokenization of the notes ###
-  writeLines("\tTokenizing notes")
+  ParallelLogger::logInfo("\tTokenizing notes")
   tokenizer<-cs$tokenizer
+  t0<-Sys.time()
   if(is.function(tokenizer)){
     # Custom Tokenizer function
-    tokens<-tokenizer(notes_processed$noteText)
-    names(tokens)<-notes_processed$rowId
+    tokens<-unlist(pbapply::pblapply(notes, tokenizer),recursive = F)
+    names(tokens)<-notes$rowId
     notes_tokenized <- quanteda::tokens(tokens)
   } else if(tokenizer == "spacy"){
     #library(spacyr) (POS, lemmatization, dependency)
-    # notes_corpus<-quanteda::corpus(notes_processed, docid_field="rowId", text_field="noteText")
+    # notes_corpus<-quanteda::corpus(notes, docid_field="rowId", text_field="noteText")
     # spacyr::spacy_initialize(model = "en_core_web_sm", condaenv="spacy_condaenv",entity=F)
     # parsedtxt <- spacyr::spacy_parse(notes_corpus, pos=F, tag=F, lemma=T, entity=F, additional_attributes = c("is_punct"), multithread=T)
     # spacyr::spacy_finalize()
@@ -103,51 +105,53 @@ getTextRepCovariateData <- function(connection,
 
   } else {
     # Quanteda tokenizer function
-    notes_corpus<-quanteda::corpus(notes_processed, docid_field="rowId", text_field="noteText")
+    ParallelLogger::logInfo(paste0("\t\tUsing quanteda tokenizer: ", tokenizer))
+    notes_corpus <- quanteda::corpus(notes, docid_field="rowId", text_field="noteText")
     notes_tokenized <- quanteda::tokens(notes_corpus, what = tokenizer, remove_punct=T, remove_symbols=T)
   }
-  writeLines(paste0("\t\tTokens: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
+  ParallelLogger::logInfo(paste0("\t\tTokens: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
 
   ## 2.3.1 Remove stopwords and regex patterns from tokens ##
   if(!is.null(cs$stopwords)){
-    writeLines("\tRemoving stop words")
+    ParallelLogger::logInfo("\tRemoving stop words")
     notes_tokenized <- quanteda::tokens_remove(notes_tokenized, pattern = cs$stopwords)
-    writeLines(paste0("\t\tTokens no stopwords: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
+    ParallelLogger::logInfo(paste0("\t\tTokens no stopwords: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
   }
   if(!is.null(cs$custom_pruning_regex)){
-    writeLines("\tRemoving additional regex patterns")
+    ParallelLogger::logInfo("\tRemoving additional regex patterns")
     notes_tokenized <- quanteda::tokens_remove(notes_tokenized, pattern = cs$custom_pruning_regex, valuetype="regex")
-    writeLines(paste0("\t\tTokens: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
+    ParallelLogger::logInfo(paste0("\t\tTokens: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
   }
 
   ## 2.3.2 create ngrams if requested ##
   if (max(cs$ngrams)>1){
-    writeLines("\tCalculating word ngrams")
+    ParallelLogger::logInfo("\tCalculating word ngrams")
     notes_tokenized <- quanteda::tokens_ngrams(notes_tokenized, n = cs$ngrams)
-    writeLines(paste0("\t\tTokens ngrams: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
+    ParallelLogger::logInfo(paste0("\t\t",round(difftime(Sys.time(),t0,units = 'min'),2), "min"))
+    ParallelLogger::logInfo(paste0("\t\tTokens ngrams: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
   }
 
   ### 2.4 Create DFM(DTM) ###
-  writeLines("\tCreating document term matrix (DTM)")
+  ParallelLogger::logInfo("\tCreating document term matrix (DTM)")
   notes_dfm<-quanteda::dfm(notes_tokenized)
-  writeLines(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm)," rowIds x ",quanteda::nfeat(notes_dfm)," words, Memory: ",format(utils::object.size(notes_dfm), units = "auto")))
+  ParallelLogger::logInfo(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm)," rowIds x ",quanteda::nfeat(notes_dfm)," words, Memory: ",format(utils::object.size(notes_dfm), units = "auto")))
 
   ## 2.4.1 trim dfm on term and doc count ##
-  writeLines("\t\tTrimming DTM based on word count")
+  ParallelLogger::logInfo("\t\tTrimming DTM based on word count")
   notes_dfm_trimmed <- quanteda::dfm_trim(notes_dfm,
     min_termfreq = cs$term_count_min, max_termfreq = cs$term_count_max, termfreq_type = 'count',
     min_docfreq = cs$doc_count_min, max_docfreq=cs$doc_count_max, docfreq_type='count')
-  writeLines(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm_trimmed)," rowIds x ",quanteda::nfeat(notes_dfm_trimmed)," words, Memory: ",format(utils::object.size(notes_dfm_trimmed), units = "auto")))
+  ParallelLogger::logInfo(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm_trimmed)," rowIds x ",quanteda::nfeat(notes_dfm_trimmed)," words, Memory: ",format(utils::object.size(notes_dfm_trimmed), units = "auto")))
   ## 2.4.2 trim dfm on doc proportion ##
-  writeLines("\t\tTrimming DTM based on word document proportion")
+  ParallelLogger::logInfo("\t\tTrimming DTM based on word document proportion")
   notes_dfm_trimmed <- quanteda::dfm_trim(notes_dfm_trimmed,
     min_docfreq = cs$doc_proportion_min, max_docfreq=cs$doc_proportion_max, docfreq_type='prop')
-  writeLines(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm_trimmed)," rowIds x ",quanteda::nfeat(notes_dfm_trimmed)," words, Memory: ",format(utils::object.size(notes_dfm_trimmed), units = "auto")))
+  ParallelLogger::logInfo(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm_trimmed)," rowIds x ",quanteda::nfeat(notes_dfm_trimmed)," words, Memory: ",format(utils::object.size(notes_dfm_trimmed), units = "auto")))
   if(!is.infinite(cs$vocab_term_max)){
-    writeLines("\t\tTrimming DTM based on max number of terms")
+    ParallelLogger::logInfo("\t\tTrimming DTM based on max number of terms")
     notes_dfm_trimmed <- quanteda::dfm_trim(notes_dfm_trimmed,
                                             max_termfreq = cs$vocab_term_max, docfreq_type='rank')
-    writeLines(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm_trimmed)," rowIds x ",quanteda::nfeat(notes_dfm_trimmed)," words, Memory: ",format(utils::object.size(notes_dfm_trimmed), units = "auto")))
+    ParallelLogger::logInfo(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm_trimmed)," rowIds x ",quanteda::nfeat(notes_dfm_trimmed)," words, Memory: ",format(utils::object.size(notes_dfm_trimmed), units = "auto")))
   }
 
   ## 2.4.3 save the vocabulary if requested ##
@@ -163,50 +167,56 @@ getTextRepCovariateData <- function(connection,
 
   ### 3.0 Build general text statistics
   # TODO
-
+  if("stats" %in% textrep){
+    ParallelLogger::logInfo("\tCreating descriptive statistic covariates")
+    DM_STATS <- getTextStats(notes_tokenized)
+    tempCovariates <- toCovariateData(DM_STATS,"stats", startDay,endDay,idstaken,cs$idrange,sqlquery)
+    covariates <- appendCovariateData(tempCovariates,covariates)
+    idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
+  }
 
   ### 3.1  Build the TF covariates (Using DTM) ###
   if("tf" %in% textrep){
-    writeLines("\tCreating TF covariates")
+    ParallelLogger::logInfo("\tCreating TF covariates")
     DTM_TF <- tidytext::tidy(quanteda::convert(notes_dfm_trimmed, to = "tm")) %>% dplyr::rename(rowId=document, word=term, tf=count)
-    tempCovariates <- toCovariateData(DTM_TF,"tf", startDay,endDay,idstaken,sqlquery)
+    tempCovariates <- toCovariateData(DTM_TF,"tf", startDay,endDay,idstaken,cs$idrange,sqlquery)
     covariates <- appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
   ### 3.2 Build the TFIDF covariates (Using DTM) ###
   if("tfidf" %in% textrep){
-    writeLines("\tCreating TFIDF covariates")
+    ParallelLogger::logInfo("\tCreating TFIDF covariates")
     DTM_TFIDF <- quanteda::dfm_tfidf(notes_dfm_trimmed, scheme_tf = "count", base=10)
     DTM_TFIDF <- suppressWarnings(tidytext::tidy(quanteda::convert(DTM_TFIDF, to = "tm")) %>% dplyr::rename(rowId=document, word=term, tfidf=count))
-    tempCovariates <- toCovariateData(DTM_TFIDF, "tfidf", startDay,endDay,idstaken,sqlquery)
+    tempCovariates <- toCovariateData(DTM_TFIDF, "tfidf", startDay,endDay,idstaken,cs$idrange,sqlquery)
     covariates <- appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
   ### 3.3 Build the LDA topic model covariates (Using DTM) ###
   if("LDA" %in% textrep){
-    writeLines("\tCreating LDA topic model covariates")
+    ParallelLogger::logInfo("\tCreating LDA topic model covariates")
     dtm_tp <- quanteda::convert(notes_dfm_trimmed, to = "topicmodels")
     lda <- topicmodels::LDA(dtm_tp, k = 100, control = list(seed = 1234))
     saveRDS(lda, file = "ldaModel")
-    DTM_LDA <- tidytext::tidy(lda, matrix = "gamma") %>%
+    DM_LDA <- tidytext::tidy(lda, matrix = "gamma") %>%
       dplyr::rename(rowId=document, word=topic, lda=gamma) %>%
       dplyr::mutate(word=paste0("topic",word))
-    tempCovariates <- toCovariateData(DTM_LDA, "lda", startDay,endDay,idstaken,sqlquery)
+    tempCovariates <- toCovariateData(DM_LDA, "lda", startDay,endDay,idstaken,cs$idrange,sqlquery)
     covariates <- appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
   ### 3.4 Build the STM topic model covariates (Using DTM) ###
   if("STM" %in% textrep){
-    writeLines("\tCreating STM topic model covariates")
+    ParallelLogger::logInfo("\tCreating STM topic model covariates")
     stm <- stm(notes_dfm_trimmed, K = 100, verbose = TRUE, init.type = "Spectral")
     saveRDS(stm, file = "stmModel")
     DTM_STM <- tidytext::tidy(stm, matrix = "gamma") %>%
       dplyr::rename(rowId=document, word=topic, lda=gamma) %>%
       dplyr::mutate(word=paste0("topic",word))
-    tempCovariates <- toCovariateData(DTM_LDA, "lda", startDay,endDay,idstaken,sqlquery)
+    tempCovariates <- toCovariateData(DTM_LDA, "lda", startDay,endDay,idstaken,cs$idrange,sqlquery)
     covariates <- appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
@@ -214,7 +224,8 @@ getTextRepCovariateData <- function(connection,
   ### 3.5 Document embedding (using DTM and Word embedding)
   #TODO
 
-  writeLines(paste0("Done, total time: ",(proc.time() - t1)[3]," secs"))
+  assign("idstaken",idstaken,envir = .GlobalEnv) #debug
+  ParallelLogger::logInfo(paste0("Done, total time: ",(proc.time() - t1)[3]," secs"))
 
   #========= 4. return a covariateData object of all the constructed covariates =========#
   return(covariates)

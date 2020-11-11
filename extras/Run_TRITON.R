@@ -17,8 +17,8 @@ dir.create(outputFolder, showWarnings = FALSE) # Create folder if does not exist
 #=== Custom preprocessing function example ===#
 custom_preprocessing<-function(string){
   res<-tolower(string) %>% # Text to lower case
-    stringr::str_replace_all("[0-9]+", " ") %>% # remove numbers
-    stringr::str_replace_all("_+", " ") # remove all under scores
+  res<-stringr::str_replace_all(res,"[0-9]+", " ") %>% # remove numbers
+  res<-stringr::str_replace_all(res,"_+", " ") # remove all under scores
   return(res)
 }
 

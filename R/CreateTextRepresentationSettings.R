@@ -42,10 +42,11 @@ createTextRepCovariateSettings <- function(useTextData = TRUE,
                                         doc_proportion_min=0.001,
                                         dictionaryVocabIds=NULL,
                                         representations=c("tfidf"),
-                                        outcomeFolder=NULL,
+                                        idrange=NULL,
+                                        outputFolder=NULL,
                                         saveVocab=FALSE) {
 
-  if(saveVocab & is.null(outcomeFolder)) stop("specify the outcomeFolder to save the vocab")
+  if(saveVocab & is.null(outputFolder)) stop("specify the outputFolder to save the vocab")
 
   covariateSettings <- list(useTextData = useTextData,
                             startDay=startDay,
@@ -64,7 +65,8 @@ createTextRepCovariateSettings <- function(useTextData = TRUE,
                             dictionaryVocabIds=dictionaryVocabIds,
                             custom_pruning_regex=custom_pruning_regex,
                             representations=representations,
-                            outcomeFolder=outcomeFolder,
+                            idrange=idrange,
+                            outputFolder=outputFolder,
                             saveVocab=saveVocab)
   attr(covariateSettings, "fun") <- "getTextRepCovariateData"
   class(covariateSettings) <- "covariateSettings"

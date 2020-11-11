@@ -1,10 +1,14 @@
 
 ImportNotes<- function(connection, sqlquery, rowIdField){
   ##==## Imports notes from database given sql query ##==##
-  writeLines(paste0("\tImporting notes and grouping by '",rowIdField,"'"))
+  ParallelLogger::logInfo(paste0("\tImporting notes"))
+  t0<-Sys.time()
   notes<-DatabaseConnector::querySql(connection, sql = sqlquery, snakeCaseToCamelCase=TRUE)
   notes.shape<-dim(notes)
-  writeLines(paste0("\t\tNumber of notes: ",notes.shape[1],", Memory size: ",format(utils::object.size(notes), units = "auto")))
+  ParallelLogger::logInfo(paste0("\t\t",round(difftime(Sys.time(),t0,units = 'min'),2)," min"))
+  ParallelLogger::logInfo(paste0("\t\tNumber of notes: ",notes.shape[1],", Memory size: ",format(utils::object.size(notes), units = "auto")))
+  ParallelLogger::logInfo(paste0("\tGrouping by '",rowIdField,"'"))
+  t0<-Sys.time()
   notes<-notes%>%
     dplyr::group_by_at(SqlRender::snakeCaseToCamelCase(rowIdField)) %>%
     dplyr::summarise(noteText = paste0(noteText, collapse = " nextnote ")) %>%
@@ -12,18 +16,33 @@ ImportNotes<- function(connection, sqlquery, rowIdField){
     dplyr::na_if("NA")
   notes.shape<-dim(notes)
   #assign("notes", notes, envir = .GlobalEnv) #debug
-  writeLines(paste0("\t\tNumber of grouped notes: ",notes.shape[1],", Memory size: ",format(utils::object.size(notes), units = "auto")))
+  ParallelLogger::logInfo(paste0("\t\t",round(difftime(Sys.time(),t0,units = 'min'),2)," min"))
+  ParallelLogger::logInfo(paste0("\t\tNumber of grouped notes: ",notes.shape[1],", Memory size: ",format(utils::object.size(notes), units = "auto")))
   cntNa<-sum(is.na(notes$noteText))
-  writeLines(paste0("\t\t'",rowIdField,"'s without notes: ", cntNa))
+  ParallelLogger::logInfo(paste0("\t\t'",rowIdField,"'s without notes: ", cntNa))
   notes<-notes[complete.cases(notes),] #remove all empty notes
   return(notes)
 }
 
-CreateTextStats<-function(tokens){
+getTextStats<-function(tokens){
   ##==## creates general text features using tokens ##==##
+  textstats_df<-data.frame(rowId=names(tokens))
+  #the number of tokens in total
+  textstats_df$ntoken <- quanteda::ntoken(tokens)
+  #the number of characters in total
+  textstats_df$nchar <- unlist(lapply(tokens,function(x) sum(nchar(unlist(x)))))
+  #the number of characters per token(or document)
+  textstats_df$avgnchar <- unlist(lapply(tokens,function(x) mean(nchar(unlist(x)))))
+  #the number of notes
+  textstats_df$nnotes <- unlist(lapply(tokens,function(x) max(sum(unlist(x)%in%"nextnote"),1) ))
+  #the avg number of tokens per note
+  textstats_df$avgntokennote<-textstats_df$ntoken/textstats_df$nnotes
+  #the avg number of tokens per note
+  textstats_df$avgncharnote<-textstats_df$nchar/textstats_df$nnotes
+
 }
 
-toCovariateData<- function(dtm, repName, startDay, endDay, idstaken, sql){
+toCovariateData<- function(dtm, repName, startDay, endDay, idstaken, idrange, sql){
   ##==## Converts sparse long format DTM to FeatureExtraction covariate object ##==##
   strWd<-paste0(" (",startDay," to ",endDay," days)")
   covariates_allCols<-dtm %>%
@@ -34,7 +53,7 @@ toCovariateData<- function(dtm, repName, startDay, endDay, idstaken, sql){
            covariate_name=as.factor(covariate_name))
 
   # Give every covariate a unique id
-  covariates_allCols$covariate_id<-as.numeric(getUniqueId(covariates_allCols$covariate_name, idstaken))
+  covariates_allCols$covariate_id<-as.numeric(getUniqueId(covariates_allCols$covariate_name, idstaken, idrange))
 
   # construct FeatureExtraction covariates
   covariates<-covariates_allCols %>%

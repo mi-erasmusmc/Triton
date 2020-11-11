@@ -28,15 +28,16 @@ hasData <- function(data) {
   return(!is.null(data) && (data %>% count() %>% pull()) > 0)
 }
 
-getUniqueId<-function(Names, idstaken){
+getUniqueId<-function(Names, idstaken, idrange=NULL){
   ##==## creates a unique(random) id for a covariate ##==##
-  writeLines("\t\tCreating unique covariate ids")
+  ParallelLogger::logInfo("\t\tCreating unique covariate ids")
   Names<-as.data.frame(Names)
   colnames(Names)<-"name"
   uniqueNames<-as.data.frame(unique(Names))
   colnames(uniqueNames)<-"name"
   ## generate the ids
-  uniqueNames$ids<-as.integer(paste0((as.integer(runif(n=nrow(uniqueNames),min = 0,max = 2147482))),999))
+  if(is.null(idrange)){idrange<-c(1,2147482)}
+  uniqueNames$ids<-as.integer(paste0((as.integer(runif(n=nrow(uniqueNames),min = idrange[1],max = idrange[2]))),999))
   ## change the ids if duplicated or taken
   while ((length(uniqueNames$ids[duplicated(uniqueNames$ids)])>0) || (!all(is.na(match(uniqueNames$ids,idstaken))))) {
     #print(paste0("duplicated:",length(uniqueNames$ids[duplicated(uniqueNames$ids)]))) #Debug
