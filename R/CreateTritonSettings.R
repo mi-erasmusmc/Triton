@@ -1,6 +1,6 @@
-#' createTextRepCovariateSettings
+#' createTritonCovariateSettings
 #'
-#' Create a covariateSettings object for constructing text representation covariates from the notes table in the OMOP CDM.
+#' Create a covariateSettings object for constructing text representation (Triton) covariates from the notes table in the OMOP CDM.
 #'
 #' @importFrom magrittr "%>%"
 #' @param useTextData logical; option to disable the creation of text representation covariates.
@@ -25,10 +25,10 @@
 #' @return covariateSettings object, that can be used by the OHDSI FeatureExtraction package.
 #' @export
 
-createTextRepCovariateSettings <- function(useTextData = TRUE,
+createTritonCovariateSettings <- function(useTextData = TRUE,
                                         startDay=-30,
                                         endDay=0,
-                                        preprocessor_function=tolower,
+                                        preprocessor_function=NULL,
                                         tokenizer_function="word",
                                         stopwords=NULL,
                                         custom_pruning_regex=NULL,
@@ -42,11 +42,18 @@ createTextRepCovariateSettings <- function(useTextData = TRUE,
                                         doc_proportion_min=0.001,
                                         dictionaryVocabIds=NULL,
                                         representations=c("tfidf"),
+                                        word_embeddings=NULL,
                                         idrange=NULL,
                                         outputFolder=NULL,
-                                        saveVocab=FALSE) {
+                                        parallel=TRUE,
+                                        saveVocab=FALSE,
+                                        covariateDataSave="",
+                                        covariateDataLoad="",
+                                        customWhere="",
+                                        validationVarImpTable=NULL) {
 
-  if(saveVocab & is.null(outputFolder)) stop("specify the outputFolder to save the vocab")
+  if(saveVocab & is.null(outputFolder)) stop("Specify the outputFolder to save the vocab")
+  if("text2vec" %in% representations & is.null(word_embeddings)) stop("Provide the word_embeddings to use text2vec")
 
   covariateSettings <- list(useTextData = useTextData,
                             startDay=startDay,
@@ -65,10 +72,16 @@ createTextRepCovariateSettings <- function(useTextData = TRUE,
                             dictionaryVocabIds=dictionaryVocabIds,
                             custom_pruning_regex=custom_pruning_regex,
                             representations=representations,
+                            word_embeddings=word_embeddings,
                             idrange=idrange,
                             outputFolder=outputFolder,
-                            saveVocab=saveVocab)
-  attr(covariateSettings, "fun") <- "getTextRepCovariateData"
+                            parallel=parallel,
+                            saveVocab=saveVocab,
+                            covariateDataSave=covariateDataSave,
+                            covariateDataLoad=covariateDataLoad,
+                            customWhere=customWhere,
+                            validationVarImpTable=validationVarImpTable)
+  attr(covariateSettings, "fun") <- "getTritonCovariateData"
   class(covariateSettings) <- "covariateSettings"
   return(covariateSettings)
 }

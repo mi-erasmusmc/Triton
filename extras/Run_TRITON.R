@@ -16,8 +16,8 @@ dir.create(outputFolder, showWarnings = FALSE) # Create folder if does not exist
 
 #=== Custom preprocessing function example ===#
 custom_preprocessing<-function(string){
-  res<-tolower(string) %>% # Text to lower case
-  res<-stringr::str_replace_all(res,"[0-9]+", " ") %>% # remove numbers
+  res<-tolower(string)# Text to lower case
+  res<-stringr::str_replace_all(res,"[0-9]+", " ") # remove numbers
   res<-stringr::str_replace_all(res,"_+", " ") # remove all under scores
   return(res)
 }
@@ -63,7 +63,10 @@ triton_covariateSettings <- Triton::createTextRepCovariateSettings(
   dictionaryVocabIds = NULL, # Provide cdm vocabulary ids to perform Dictionary search, otherwise NULL.
   representations = c("tf","tfidf"), # list of representations to be generated
   outputFolder = outputFolder, # Provide output location and to save vocab and other info, otherwise NULL.
-  saveVocab = TRUE)
+  idrange = c(1,2000000),
+  parallel = TRUE,
+  saveVocab = TRUE,
+  validationVarImpTable = NULL)
 
 # The triton_covariateSettings can now be used within the OHDSI framework.
 # For example in the PatientLevelPrediction package.

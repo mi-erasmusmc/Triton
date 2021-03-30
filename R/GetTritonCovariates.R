@@ -1,6 +1,6 @@
-#' getTextRepCovariateData
+#' getTritonCovariateData
 #'
-#' This covariate builder creates text representation covariates from a cohort in the OMOP cdm
+#' This covariate builder creates text representation (Triton) covariates from a cohort in the OMOP cdm
 #'
 #' @importFrom magrittr "%>%"
 #' @param connection A connection to the server containing the schema as created using the connect function in the DatabaseConnector package.
@@ -15,37 +15,60 @@
 #' @return a covariateData object that can be used my other cdm framework functions.
 #' @export
 
-getTextRepCovariateData <- function(connection,
-                                    oracleTempSchema = NULL,
-                                    cdmDatabaseSchema,
-                                    cohortTable,
-                                    cohortId,
-                                    cdmVersion = "5",
-                                    rowIdField = "subject_id",
-                                    covariateSettings,
-                                    aggregated = FALSE) {
+getTritonCovariateData <- function(connection,
+                                   oracleTempSchema = NULL,
+                                   cdmDatabaseSchema,
+                                   cohortTable,
+                                   cohortId,
+                                   cdmVersion = "5",
+                                   rowIdField,
+                                   covariateSettings,
+                                   aggregated = FALSE) {
 
   #========= 1. SETUP =========#
   ### check if the covariates need to be constructed ###
   if (covariateSettings$useTextData == FALSE) {
     return(NULL)
+  } else {
+    ParallelLogger::logInfo("Starting Triton covariate builder")
+    t1 <- Sys.time() #Start timer
   }
-
-  t1 <- Sys.time() #Start timer
-  quanteda::quanteda_options(threads=max(2,parallel::detectCores())) #Must be set as an option
   cs<-covariateSettings #shorten name
 
+  ### check if saved covariateData can be loaded ###
+  if(cs$covariateDataLoad!=""){
+    ParallelLogger::logInfo(paste("\tLoading covariateData from",cs$covariateDataLoad))
+    covariates<-FeatureExtraction::loadCovariateData(file = cs$covariateDataLoad)
+    ParallelLogger::logInfo(paste0("Done, total time: ",round(difftime(Sys.time(),t1, units = 'min'),2)," min"))
+    return(covariates) # return covariates and skip creation
+  }
+
+  ## setup parallelization
+  quanteda::quanteda_options(threads=max(2,parallel::detectCores()))
+  doPar<-FALSE
+  if(is.logical(cs$parallel) && cs$parallel){
+    #TODO also check OS windows/unix
+    doPar<-TRUE
+    parCores<-parallel::detectCores()
+  } else if (is.numeric(cs$parallel)){
+    doPar<-TRUE
+    parCores<-cs$parallel
+  }
+
   ### Check what covariate types need to be constructed ###
-  repOpts<-c("tf","tfidf","text")
+  repOpts<-c("tb","tf","tfidf","text2vec","lda","textstats")
   textrep<-tolower(cs$representation)
   if (!all(textrep %in% repOpts)){
     wrong<-paste(textrep[which(!textrep %in% repOpts)], collapse = ", ")
     stop(paste0("'",wrong,"' is/are not a valid text representation(s), choose from '",paste(repOpts,collapse = ", "),"'."))
     return(NULL)
   }
-
+  ### Check if processing function is a function, if not null ###
+  if(!is.null(cs$preprocessor_function) & !is.function(cs$preprocessor_function)){
+    stop("The preprocessor_function is not a valid R function.")
+  }
   ### Check valid tokenizer options ###
-  tokOpts<-c("word","fasterword","fastestword","sentence","character")
+  tokOpts<-c("word","fasterword","fastestword","sentence","character","udpipe")
   tokfunc<-cs$tokenizer_function
   if (!is.function(tokfunc) && !tokfunc %in% tokOpts){
     stop(paste0("'",tokfunc,"' is not a valid quanteda tokenizer, choose from '",paste(repOpts,collapse = ", "),"', or provide your own tokenizer as R function."))
@@ -56,177 +79,202 @@ getTextRepCovariateData <- function(connection,
   startDay<-cs$startDay
   endDay<-cs$endDay
 
-  #========= 2. Run Feature Contruction =========#
-
-  ParallelLogger::logInfo(paste0("Constructing '",paste(textrep,collapse = ", "),"' covariates, during day '",startDay,
-                   "' through '",endDay,"' days relative to index."))
-
-  ### 2.1 Import the cohort's notes from OMOP CDM ###
-  # SQl to get the Notes
-  sqlquery<-Triton:::buildNoteSQLquery(connection,
-                              cdmDatabaseSchema,
-                              cohortTable,
-                              cohortId,
-                              rowIdField,
-                              startDay,
-                              endDay)
-  notes<-Triton:::ImportNotes(connection, sqlquery, rowIdField)
-  colnames(notes)<-c("rowId","noteText")
-
-  ### 2.2 Preprocessing the notes ###
-  ParallelLogger::logInfo("\tPreprocessing notes")
-  # notes <- notes %>%
-  #   dplyr::mutate(noteText = cs$preprocessor_function(noteText))
-  notes$noteText <- unlist(pbapply::pblapply(notes$noteText, custom_preprocessing))
-
-  ### 2.3 Tokenization of the notes ###
-  ParallelLogger::logInfo("\tTokenizing notes")
-  tokenizer<-cs$tokenizer
-  t0<-Sys.time()
-  if(is.function(tokenizer)){
-    # Custom Tokenizer function
-    tokens<-unlist(pbapply::pblapply(notes, tokenizer),recursive = F)
-    names(tokens)<-notes$rowId
-    notes_tokenized <- quanteda::tokens(tokens)
-  } else if(tokenizer == "spacy"){
-    #library(spacyr) (POS, lemmatization, dependency)
-    # notes_corpus<-quanteda::corpus(notes, docid_field="rowId", text_field="noteText")
-    # spacyr::spacy_initialize(model = "en_core_web_sm", condaenv="spacy_condaenv",entity=F)
-    # parsedtxt <- spacyr::spacy_parse(notes_corpus, pos=F, tag=F, lemma=T, entity=F, additional_attributes = c("is_punct"), multithread=T)
-    # spacyr::spacy_finalize()
-  } else if (tokenizer == "udpipe"){
-    #library(udpipe) (POS, lemmatization, dependency)
-
-  } else if (tokenizer == "bpe"){
-    #library(sentencepiece) (Character combinations based on observed frequency)
-
-  } else if (tokenizer == "sentencepiece"){
-    #library(sentencepiece) (Character combinations based on observed frequency)
-
+  ### check whether to create training or validation covariates ###
+  # For validation provide the model's variance importance table or a dataframe with the columns covariateId and covariateName
+  if(is.null(cs$validationVarImpTable)){
+    validation <- FALSE
+    valCovariateSet <- NULL
   } else {
-    # Quanteda tokenizer function
-    ParallelLogger::logInfo(paste0("\t\tUsing quanteda tokenizer: ", tokenizer))
-    notes_corpus <- quanteda::corpus(notes, docid_field="rowId", text_field="noteText")
-    notes_tokenized <- quanteda::tokens(notes_corpus, what = tokenizer, remove_punct=T, remove_symbols=T)
-  }
-  ParallelLogger::logInfo(paste0("\t\tTokens: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
-
-  ## 2.3.1 Remove stopwords and regex patterns from tokens ##
-  if(!is.null(cs$stopwords)){
-    ParallelLogger::logInfo("\tRemoving stop words")
-    notes_tokenized <- quanteda::tokens_remove(notes_tokenized, pattern = cs$stopwords)
-    ParallelLogger::logInfo(paste0("\t\tTokens no stopwords: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
-  }
-  if(!is.null(cs$custom_pruning_regex)){
-    ParallelLogger::logInfo("\tRemoving additional regex patterns")
-    notes_tokenized <- quanteda::tokens_remove(notes_tokenized, pattern = cs$custom_pruning_regex, valuetype="regex")
-    ParallelLogger::logInfo(paste0("\t\tTokens: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
+    validation <- TRUE
+    valCovariateSet <- getValidationCovariateSet(cs)
   }
 
-  ## 2.3.2 create ngrams if requested ##
-  if (max(cs$ngrams)>1){
-    ParallelLogger::logInfo("\tCalculating word ngrams")
-    notes_tokenized <- quanteda::tokens_ngrams(notes_tokenized, n = cs$ngrams)
-    ParallelLogger::logInfo(paste0("\t\t",round(difftime(Sys.time(),t0,units = 'min'),2), "min"))
-    ParallelLogger::logInfo(paste0("\t\tTokens ngrams: ",sum(quanteda::ntoken(notes_tokenized)),", Memory: ",format(utils::object.size(notes_tokenized), units = "auto")))
-  }
-
-  ### 2.4 Create DFM(DTM) ###
-  ParallelLogger::logInfo("\tCreating document term matrix (DTM)")
-  notes_dfm<-quanteda::dfm(notes_tokenized)
-  ParallelLogger::logInfo(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm)," rowIds x ",quanteda::nfeat(notes_dfm)," words, Memory: ",format(utils::object.size(notes_dfm), units = "auto")))
-
-  ## 2.4.1 trim dfm on term and doc count ##
-  ParallelLogger::logInfo("\t\tTrimming DTM based on word count")
-  notes_dfm_trimmed <- quanteda::dfm_trim(notes_dfm,
-    min_termfreq = cs$term_count_min, max_termfreq = cs$term_count_max, termfreq_type = 'count',
-    min_docfreq = cs$doc_count_min, max_docfreq=cs$doc_count_max, docfreq_type='count')
-  ParallelLogger::logInfo(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm_trimmed)," rowIds x ",quanteda::nfeat(notes_dfm_trimmed)," words, Memory: ",format(utils::object.size(notes_dfm_trimmed), units = "auto")))
-  ## 2.4.2 trim dfm on doc proportion ##
-  ParallelLogger::logInfo("\t\tTrimming DTM based on word document proportion")
-  notes_dfm_trimmed <- quanteda::dfm_trim(notes_dfm_trimmed,
-    min_docfreq = cs$doc_proportion_min, max_docfreq=cs$doc_proportion_max, docfreq_type='prop')
-  ParallelLogger::logInfo(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm_trimmed)," rowIds x ",quanteda::nfeat(notes_dfm_trimmed)," words, Memory: ",format(utils::object.size(notes_dfm_trimmed), units = "auto")))
-  if(!is.infinite(cs$vocab_term_max)){
-    ParallelLogger::logInfo("\t\tTrimming DTM based on max number of terms")
-    notes_dfm_trimmed <- quanteda::dfm_trim(notes_dfm_trimmed,
-                                            max_termfreq = cs$vocab_term_max, docfreq_type='rank')
-    ParallelLogger::logInfo(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm_trimmed)," rowIds x ",quanteda::nfeat(notes_dfm_trimmed)," words, Memory: ",format(utils::object.size(notes_dfm_trimmed), units = "auto")))
-  }
-
-  ## 2.4.3 save the vocabulary if requested ##
-  if(cs$saveVocab){
-    vocab<-quanteda::textstat_frequency(notes_dfm_trimmed)
-    saveRDS(vocab, file = paste0(cs$outputFolder,"/vocabfile.rds"))
-  }
-
-  #========= 3. Build the covariates =========#
-
+  ### setup return variable ###
   covariates<-NULL # start with empty covariate set
   idstaken<-NULL # start with no ids taken, for assigning unique random ids
 
-  ### 3.0 Build general text statistics
-  # TODO
-  if("stats" %in% textrep){
+  #========= 2. Run Feature Contruction =========#
+  ParallelLogger::logInfo(paste0("Constructing '",paste(textrep,collapse = ", "),"' covariates, during day '",startDay,
+                                 "' through '",endDay,"' days relative to index."))
+
+  ### 2.1 Import the cohort's notes from OMOP CDM ###
+  # SQl to get the Notes
+  notes <- Triton:::importNotesFromCohort(connection,
+                                          cdmDatabaseSchema,
+                                          cohortTable,
+                                          cohortId,
+                                          rowIdField,
+                                          startDay,
+                                          endDay,
+                                          cs$customWhere)
+
+  ### 2.2 Preprocessing the notes ###
+  notes <- Triton:::preprocessNotes(notes,cs,doPar,parCores)
+
+  ### 2.3 Tokenization of the notes ###
+  notes_tokens <- Triton:::tokenizeNotes(notes,cs,doPar,parCores)
+
+  if (length(textrep[!textrep %in% c("textstats","text2vec")])>0){
+
+    ## 2.3.1 Remove stopwords and regex patterns from tokens ##
+    notes_tokens <- Triton:::filterTokens(notes_tokens,cs)
+
+    ## 2.3.2 create ngrams if requested ##
+    if (max(cs$ngrams)>1){
+      notes_tokens <- Triton:::createNgrams(notes_tokens, cs)
+    }
+
+    ## 2.3.4 (VALIDTION) only select the terms that are in the model
+    if(validation){
+      ParallelLogger::logInfo("\tVALIDATION: only selecting the terms that are in the model")
+      notes_tokens <- quanteda::tokens_keep(notes_tokens, valCovariateSet$covTerm)
+      ParallelLogger::logInfo(paste0("\t\tTokens: ",sum(quanteda::ntoken(notes_tokens)),", Memory: ",format(utils::object.size(notes_tokens), units = "auto")))
+    }
+
+    ### 2.4 Create DFM ###
+    notes_dfm <- Triton:::createDFM(notes_tokens)
+
+    # Trim if not validation covariate set
+    if(!validation){
+      notes_dfm_trimmed <- Triton:::trimDFM(notes_dfm, cs)
+    } else {
+      notes_dfm_trimmed <- notes_dfm
+    }
+
+    ## 2.4.3 save the vocabulary if requested ##
+    if(cs$saveVocab){
+      vocab<-quanteda::textstat_frequency(notes_dfm_trimmed)
+      saveRDS(vocab, file = paste0(cs$outputFolder,"/vocabfile.rds"))
+    }
+  }
+
+  #========= 3. Build the covariates =========#
+  ### 3.1 Build general text statistics
+  if("textstats" %in% textrep){
     ParallelLogger::logInfo("\tCreating descriptive statistic covariates")
-    DM_STATS <- getTextStats(notes_tokenized)
-    tempCovariates <- toCovariateData(DM_STATS,"stats", startDay,endDay,idstaken,cs$idrange,sqlquery)
+    DTM_STATS <- Triton:::getTextStats(notes_tokens)
+    tempCovariates <- toCovariateData(DTM_STATS,"textstats", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
     covariates <- appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
-  ### 3.1  Build the TF covariates (Using DTM) ###
+  ### 3.2  Build the TB covariates (Using DTM) ###
+  if("tb" %in% textrep){
+    ParallelLogger::logInfo("\tCreating TB covariates")
+    DTM_TB <- tidytext::tidy(quanteda::convert(notes_dfm_trimmed, to = "tm")) %>%
+      dplyr::rename(rowId=document, word=term, tb=count)%>%
+      dplyr::mutate(tb=as.numeric(tb>0)) # make binary from frequency
+    tempCovariates <- toCovariateData(DTM_TB,"tb", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
+    covariates <- appendCovariateData(tempCovariates,covariates)
+    idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
+  }
+
+  ### 3.3  Build the TF covariates (Using DTM) ###
   if("tf" %in% textrep){
     ParallelLogger::logInfo("\tCreating TF covariates")
-    DTM_TF <- tidytext::tidy(quanteda::convert(notes_dfm_trimmed, to = "tm")) %>% dplyr::rename(rowId=document, word=term, tf=count)
-    tempCovariates <- toCovariateData(DTM_TF,"tf", startDay,endDay,idstaken,cs$idrange,sqlquery)
+    DTM_TF <- tidytext::tidy(quanteda::convert(notes_dfm_trimmed, to = "tm")) %>%
+      dplyr::rename(rowId=document, word=term, tf=count)
+    tempCovariates <- toCovariateData(DTM_TF,"tf", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
     covariates <- appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
-  ### 3.2 Build the TFIDF covariates (Using DTM) ###
+  ### 3.4 Build the TFIDF covariates (Using DTM) ###
   if("tfidf" %in% textrep){
     ParallelLogger::logInfo("\tCreating TFIDF covariates")
     DTM_TFIDF <- quanteda::dfm_tfidf(notes_dfm_trimmed, scheme_tf = "count", base=10)
-    DTM_TFIDF <- suppressWarnings(tidytext::tidy(quanteda::convert(DTM_TFIDF, to = "tm")) %>% dplyr::rename(rowId=document, word=term, tfidf=count))
-    tempCovariates <- toCovariateData(DTM_TFIDF, "tfidf", startDay,endDay,idstaken,cs$idrange,sqlquery)
+    DTM_TFIDF <- suppressWarnings(tidytext::tidy(quanteda::convert(DTM_TFIDF, to = "tm")) %>%
+                                    dplyr::rename(rowId=document, word=term, tfidf=count))
+    tempCovariates <- toCovariateData(DTM_TFIDF, "tfidf", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
     covariates <- appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
-  ### 3.3 Build the LDA topic model covariates (Using DTM) ###
-  if("LDA" %in% textrep){
+  ### 3.5 Apply the LDA topic model covariates (Using DTM) ###
+  if("lda" %in% textrep){
     ParallelLogger::logInfo("\tCreating LDA topic model covariates")
-    dtm_tp <- quanteda::convert(notes_dfm_trimmed, to = "topicmodels")
-    lda <- topicmodels::LDA(dtm_tp, k = 100, control = list(seed = 1234))
-    saveRDS(lda, file = "ldaModel")
-    DM_LDA <- tidytext::tidy(lda, matrix = "gamma") %>%
-      dplyr::rename(rowId=document, word=topic, lda=gamma) %>%
-      dplyr::mutate(word=paste0("topic",word))
-    tempCovariates <- toCovariateData(DM_LDA, "lda", startDay,endDay,idstaken,cs$idrange,sqlquery)
+    lda<-readRDS(file = "ldaModel.rds")
+    ## predicting on new data
+    #TODO
+    newdfm <- quanteda::dfm_match(notes_dfm_trimmed,)
+    ldaNew <- predict(lda,newdfm)
+
+    DM_LDA <- ldaRes %>%
+      tibble::rownames_to_column("rowId") %>%
+      tidyr::gather("word","lda",-rowId) %>%
+      dplyr::mutate(word=paste0("lda",word))
+    tempCovariates <- toCovariateData(DM_LDA, "lda", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
     covariates <- appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
-  ### 3.4 Build the STM topic model covariates (Using DTM) ###
-  if("STM" %in% textrep){
+  ### 3.6 Apply the STM topic model covariates (Using DTM) ###
+  if("stm" %in% textrep){
     ParallelLogger::logInfo("\tCreating STM topic model covariates")
-    stm <- stm(notes_dfm_trimmed, K = 100, verbose = TRUE, init.type = "Spectral")
-    saveRDS(stm, file = "stmModel")
-    DTM_STM <- tidytext::tidy(stm, matrix = "gamma") %>%
+    stm<-readRDS(file = "stmModel.rds")
+    ## predicting on new data
+    #TODO
+    newdfm <- quanteda::dfm_match(notes_dfm_trimmed,)
+    stmNew <- stm::fitNewDocuments(model = stm, documents = newdfm)
+    DTM_STM <- tidytext::tidy(stmNew, matrix = "gamma") %>%
       dplyr::rename(rowId=document, word=topic, lda=gamma) %>%
-      dplyr::mutate(word=paste0("topic",word))
-    tempCovariates <- toCovariateData(DTM_LDA, "lda", startDay,endDay,idstaken,cs$idrange,sqlquery)
+      dplyr::mutate(word=paste0("stmtopic",word))
+    tempCovariates <- toCovariateData(DTM_LDA, "lda", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
     covariates <- appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
-  ### 3.5 Document embedding (using DTM and Word embedding)
-  #TODO
+  ### 3.7 Apply the LSA model covariates (Using DTM) ###
+  if("lsa" %in% textrep){
+    ParallelLogger::logInfo("\tCreating LSA topic model covariates")
+    lsa<-readRDS(file = "lsaModel.rds")
+    ## predicting on new data
+    newdfm <- quanteda::dfm_match(notes_dfm_trimmed,quanteda::featnames(lsa$data))
+    lsaNew <- predict(lsa,newdfm)
+    lsaRes <- data.frame(as.matrix(lsaNew))
+    DM_LSA <- lsaRes %>%
+      tibble::rownames_to_column("rowId") %>%
+      tidyr::gather("word","lsa",-rowId) %>%
+      dplyr::mutate(word=paste0("lsa",word))
+    tempCovariates <- toCovariateData(DM_LSA, "lsa", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
+    covariates <- appendCovariateData(tempCovariates,covariates)
+    idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
+  }
 
-  assign("idstaken",idstaken,envir = .GlobalEnv) #debug
-  ParallelLogger::logInfo(paste0("Done, total time: ",(proc.time() - t1)[3]," secs"))
+  ### 3.8 Build aggregated word embedding covariates (using tokens and word embeddings)
+  if("text2vec" %in% textrep){
+    ParallelLogger::logInfo("\tCreating text2vec covariates")
+    wordsInEmb<-rownames(get(cs$word_embedding))
+    ParallelLogger::logInfo("\t\tLimit tokens to embedding terms")
+    t0<-Sys.time()
+    if(doPar) notes_tokens_filt<-parallel::mclapply(notes_tokens,Triton:::selectEmbTerms,wordsInEmb=wordsInEmb,mc.cores = parCores)
+    if(!doPar) notes_tokens_filt<-lapply(notes_tokens,Triton:::selectEmbTerms,wordsInEmb=wordsInEmb)
+    ParallelLogger::logInfo(paste0("\t\t",round(difftime(Sys.time(),t0, units = 'min'),2)," min"))
+    ParallelLogger::logInfo("\t\tAggregating word embeddings")
+    t0<-Sys.time()
+    if(doPar) notes_embedded<-parallel::mclapply(notes_tokens_filt,Triton:::aggrNoteEmbedding,wordEmb=get(cs$word_embedding),mc.cores = parCores)
+    if(!doPar) notes_embedded<-lapply(notes_tokens_filt,Triton:::aggrNoteEmbedding,wordEmb=get(cs$word_embedding))
+    ParallelLogger::logInfo("\t\tNote embeddings created")
+    ParallelLogger::logInfo(paste0("\t\t",round(difftime(Sys.time(),t0, units = 'min'),2)," min"))
+    notes_embedded<-data.frame(do.call(rbind, notes_embedded))
+    colnames(notes_embedded)<-paste0("E",c(1:ncol(notes_embedded)))
+    DTM_T2V<-notes_embedded %>%
+      tibble::rownames_to_column("rowId") %>%
+      tidyr::gather("word","t2v",2:ncol(.))
+    tempCovariates <- toCovariateData(DTM_T2V,"t2v", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
+    covariates <- appendCovariateData(tempCovariates,covariates)
+    idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
+  }
 
   #========= 4. return a covariateData object of all the constructed covariates =========#
+  ### 4.0 saving covariateData
+  if(cs$covariateDataSave!=""){
+    ParallelLogger::logInfo(paste("\tSaving covariateData to",cs$covariateDataSave))
+    FeatureExtraction::saveCovariateData(covariates,file = cs$covariateDataSave)
+    covariates<-FeatureExtraction::loadCovariateData(file = cs$covariateDataSave)
+  }
+
+  ### 4.1 returning covariateData
+  ParallelLogger::logInfo(paste0("Done, total time: ",round(difftime(Sys.time(),t1, units = 'min'),2)," min"))
   return(covariates)
 }
