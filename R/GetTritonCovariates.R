@@ -56,7 +56,7 @@ getTritonCovariateData <- function(connection,
   }
 
   ### Check what covariate types need to be constructed ###
-  repOpts<-c("tb","tf","tfidf","text2vec","lda","textstats")
+  repOpts<-c("tb","tf","tfidf","text2vec","lda","lsa","stm","textstats")
   textrep<-tolower(cs$representation)
   if (!all(textrep %in% repOpts)){
     wrong<-paste(textrep[which(!textrep %in% repOpts)], collapse = ", ")
@@ -81,12 +81,12 @@ getTritonCovariateData <- function(connection,
 
   ### check whether to create training or validation covariates ###
   # For validation provide the model's variance importance table or a dataframe with the columns covariateId and covariateName
-  if(is.null(cs$validationVarImpTable)){
+  if(is.null(cs$validationVarImpTable) | all(tokfunc %in% c("text2vec","lda","lsa","stm"))){
     validation <- FALSE
     valCovariateSet <- NULL
   } else {
     validation <- TRUE
-    valCovariateSet <- getValidationCovariateSet(cs)
+    valCovariateSet <- Triton:::getValidationCovariateSet(cs)
   }
 
   ### setup return variable ###
@@ -193,12 +193,11 @@ getTritonCovariateData <- function(connection,
   ### 3.5 Apply the LDA topic model covariates (Using DTM) ###
   if("lda" %in% textrep){
     ParallelLogger::logInfo("\tCreating LDA topic model covariates")
-    lda<-readRDS(file = "ldaModel.rds")
+    lda<-get(cs$lda_model)
     ## predicting on new data
     #TODO
     newdfm <- quanteda::dfm_match(notes_dfm_trimmed,)
     ldaNew <- predict(lda,newdfm)
-
     DM_LDA <- ldaRes %>%
       tibble::rownames_to_column("rowId") %>%
       tidyr::gather("word","lda",-rowId) %>%
@@ -211,7 +210,7 @@ getTritonCovariateData <- function(connection,
   ### 3.6 Apply the STM topic model covariates (Using DTM) ###
   if("stm" %in% textrep){
     ParallelLogger::logInfo("\tCreating STM topic model covariates")
-    stm<-readRDS(file = "stmModel.rds")
+    stm<-get(cs$stm_model)
     ## predicting on new data
     #TODO
     newdfm <- quanteda::dfm_match(notes_dfm_trimmed,)
@@ -227,7 +226,7 @@ getTritonCovariateData <- function(connection,
   ### 3.7 Apply the LSA model covariates (Using DTM) ###
   if("lsa" %in% textrep){
     ParallelLogger::logInfo("\tCreating LSA topic model covariates")
-    lsa<-readRDS(file = "lsaModel.rds")
+    lsa<-get(cs$lsa_model)
     ## predicting on new data
     newdfm <- quanteda::dfm_match(notes_dfm_trimmed,quanteda::featnames(lsa$data))
     lsaNew <- predict(lsa,newdfm)
@@ -244,7 +243,7 @@ getTritonCovariateData <- function(connection,
   ### 3.8 Build aggregated word embedding covariates (using tokens and word embeddings)
   if("text2vec" %in% textrep){
     ParallelLogger::logInfo("\tCreating text2vec covariates")
-    wordsInEmb<-rownames(get(cs$word_embedding))
+    wordsInEmb<-rownames(get(cs$t2v_word_embedding))
     ParallelLogger::logInfo("\t\tLimit tokens to embedding terms")
     t0<-Sys.time()
     if(doPar) notes_tokens_filt<-parallel::mclapply(notes_tokens,Triton:::selectEmbTerms,wordsInEmb=wordsInEmb,mc.cores = parCores)
@@ -252,8 +251,8 @@ getTritonCovariateData <- function(connection,
     ParallelLogger::logInfo(paste0("\t\t",round(difftime(Sys.time(),t0, units = 'min'),2)," min"))
     ParallelLogger::logInfo("\t\tAggregating word embeddings")
     t0<-Sys.time()
-    if(doPar) notes_embedded<-parallel::mclapply(notes_tokens_filt,Triton:::aggrNoteEmbedding,wordEmb=get(cs$word_embedding),mc.cores = parCores)
-    if(!doPar) notes_embedded<-lapply(notes_tokens_filt,Triton:::aggrNoteEmbedding,wordEmb=get(cs$word_embedding))
+    if(doPar) notes_embedded<-parallel::mclapply(notes_tokens_filt,Triton:::aggrNoteEmbedding,wordEmb=get(cs$t2v_word_embedding),mc.cores = parCores)
+    if(!doPar) notes_embedded<-lapply(notes_tokens_filt,Triton:::aggrNoteEmbedding,wordEmb=get(cs$t2v_word_embedding))
     ParallelLogger::logInfo("\t\tNote embeddings created")
     ParallelLogger::logInfo(paste0("\t\t",round(difftime(Sys.time(),t0, units = 'min'),2)," min"))
     notes_embedded<-data.frame(do.call(rbind, notes_embedded))

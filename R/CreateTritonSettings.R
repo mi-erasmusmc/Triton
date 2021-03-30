@@ -30,7 +30,7 @@
 #' @param saveVocab logical; option to save the generated vocabulary as rds file in the outputFolder.
 #' @param covariateDataSave (optional) character; location and file name of where the created covariateData must be stored.
 #' @param covariateDataLoad (optional) character; location and file name of where the created covariateData must be loaded from. Anything else is ignored, just the covariateData is loaded and returned.
-#' @param validationVarImpTable (optional) data.frame; used for validation. A varImp data.frame with the covariate names and covariate values of a trained model. The varImp data.frame can be found in plpResult$model$varImp or plpModel$varImp.
+#' @param validationVarImpTable (optional) data.frame; used for validation of a model with bag-of-word covariates. A varImp data.frame with the covariate names and covariate values of a trained model. The varImp data.frame can be found in plpResult$model$varImp or plpModel$varImp.
 #' @return covariateSettings object, that can be used by the OHDSI FeatureExtraction package.
 #' @export
 
