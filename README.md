@@ -15,10 +15,11 @@ This covariate builder is an extension to the [FeatureExtraction package](https:
 - The NLP pipeline is language independent.
 
 Implemented text representations:
-- Word counts/term frequencies (tf)
-- Term frequency–inverse document frequency 
+- Text summary statistics (textstats)
+- Word counts/term frequencies (tf/tb)
+- Term frequency–inverse document frequency (tfidf)
 - Topic models (lda/lsa/stm)
-- Document embeddings as averaged word embeddings (GLoVE)
+- Document embeddings as averaged word embeddings (text2vec)
 
 Future implementations:
 - Import concepts from the note_nlp table
