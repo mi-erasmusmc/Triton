@@ -20,9 +20,11 @@ createTritonCovariateSettings(
   doc_count_max = Inf,
   doc_proportion_max = 0.5,
   doc_proportion_min = 0.001,
-  dictionaryVocabIds = NULL,
-  representations = c("tfidf"),
-  word_embeddings = NULL,
+  representations = c("tb"),
+  t2v_word_embeddings = NULL,
+  lda_model = NULL,
+  lsa_model = NULL,
+  stm_model = NULL,
   idrange = NULL,
   outputFolder = NULL,
   parallel = TRUE,
@@ -64,13 +66,31 @@ createTritonCovariateSettings(
 
 \item{doc_proportion_min}{numeric; minimum proportion (0.-1.) of documents which should contain term.}
 
-\item{dictionaryVocabIds}{(optional) integer vector; of omop cdm vocabulary ids that are used for dictionary matching. Set to \code{NULL}(default) to turn off dictionary matching.}
-
 \item{representations}{character vector; of text representations that should be constructed, chose from \code{"tf"} and \code{"tfidf"}. Multiple representations can be constructed at once: \code{c("tf","tfidf")}.}
 
-\item{saveVocab}{logica; option to save the generated vocabulary as rds file in the outputFolder.}
+\item{t2v_word_embeddings}{(optional) character; of a data.frame loaded in the R environment that contains the word embeddings. First column must contain the word, the other n-1 columns contain the embedding values.}
 
-\item{outcomeFolder}{(optional) character; file path and name for saving output files. Default is \code{NULL}.}
+\item{lda_model}{(optional) character; name of a data.frame loaded in the R environment that contains a lda model object.}
+
+\item{lsa_model}{(optional) character; name of a data.frame loaded in the R environment that contains a lsa model object.}
+
+\item{stm_model}{(optional) character; name of a data.frame loaded in the R environment that contains a stm model object.}
+
+\item{idrange}{(optional) integer vector; specifying the range of integers that can be used to generate the covariateids, max is 2147482. Default is c(1,2147482).}
+
+\item{outputFolder}{(optional) character; file path and name for saving output files. Default is \code{NULL}.}
+
+\item{parallel}{logical; to indicate whether multi-threading should be used. Default is True.}
+
+\item{saveVocab}{logical; option to save the generated vocabulary as rds file in the outputFolder.}
+
+\item{covariateDataSave}{(optional) character; location and file name of where the created covariateData must be stored.}
+
+\item{covariateDataLoad}{(optional) character; location and file name of where the created covariateData must be loaded from. Anything else is ignored, just the covariateData is loaded and returned.}
+
+\item{customWhere}{(optional) character; with a SQL where statement to filter the note import. Example "WHERE note_source_value='communication'".}
+
+\item{validationVarImpTable}{(optional) data.frame; used for validation. A varImp data.frame with the covariate names and covariate values of a trained model. The varImp data.frame can be found in plpResult$model$varImp or plpModel$varImp.}
 }
 \value{
 covariateSettings object, that can be used by the OHDSI FeatureExtraction package.

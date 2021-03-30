@@ -60,7 +60,6 @@ triton_covariateSettings <- Triton::createTextRepCovariateSettings(
   doc_count_max = Inf,
   doc_proportion_max = 0.5,
   doc_proportion_min = 0.005,
-  dictionaryVocabIds = NULL, # Provide cdm vocabulary ids to perform Dictionary search, otherwise NULL.
   representations = c("tf","tfidf"), # list of representations to be generated
   outputFolder = outputFolder, # Provide output location and to save vocab and other info, otherwise NULL.
   idrange = c(1,2000000),

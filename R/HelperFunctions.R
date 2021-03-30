@@ -106,14 +106,6 @@ appendCovariateData<- function(tempCovariateData,covariateData){
   return(covariateData)
 }
 
-GetDictionaryVocab <- function(connection,
-                               cdmDatabaseSchema,
-                               dictionaryVocabIds,
-                               ngrams){
-  ##==## Creates dictionary from specific omop cdm vocabulary ##==##
-  #TODO
-}
-
 selectEmbTerms<-function(toks,wordsInEmb){
   ##==## Select the terms in the tokens that are also in the embedding ##==##
   toks<-toks[toks %in% wordsInEmb]
