@@ -15,12 +15,8 @@ Imports:
   pbapply,
   parallel,
   stringr,
-  stringi,
   utils,
   tidytext,
-  quanteda,
-  tm
-Suggests:
-  spacyr,
-  udpipe,
-  sentencepiece
+  quanteda
+suggests:
+  stringi  

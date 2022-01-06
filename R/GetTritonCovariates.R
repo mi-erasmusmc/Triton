@@ -27,7 +27,8 @@ getTritonCovariateData <- function(connection,
 
   #========= 1. SETUP =========#
   ### check if the covariates need to be constructed ###
-  if (covariateSettings$useTextData == FALSE) {
+  if (covariateSettings$useNoteData == FALSE) {
+    ParallelLogger::logInfo("Triton: useNoteData is False.")
     return(NULL)
   } else {
     ParallelLogger::logInfo("Starting Triton covariate builder")
@@ -56,32 +57,47 @@ getTritonCovariateData <- function(connection,
   }
 
   ### Check what covariate types need to be constructed ###
-  repOpts<-c("tb","tf","tfidf","text2vec","lda","lsa","stm","textstats")
-  textrep<-tolower(cs$representation)
-  if (!all(textrep %in% repOpts)){
-    wrong<-paste(textrep[which(!textrep %in% repOpts)], collapse = ", ")
-    stop(paste0("'",wrong,"' is/are not a valid text representation(s), choose from '",paste(repOpts,collapse = ", "),"'."))
-    return(NULL)
+  textrep<-cs$representations
+  reps<- c("BoW","DocEmb","TopicModel","TextStats")
+  BoW_types<- c("binary","frequency","tfidf")
+  TopicModel_type<- c("lsa","lda","stm")
+  if (!all(textrep %in% reps)){
+    wrong<-paste(textrep[which(!textrep %in% reps)], collapse = ", ")
+    stop(paste0("'",wrong,"' is/are not a valid text representation(s), choose from '",paste(reps,collapse = ", "),"'."))
   }
+  if("BoW" %in% textrep){
+    if(!all(cs$BoW_type %in% BoW_types)){
+      wrong<-paste(cs$BoW_type[which(!cs$BoW_type %in% BoW_types)], collapse = ", ")
+      stop(paste0("'",wrong,"' is/are not a BoW_type(s), choose from '",paste(BoW_types,collapse = ", "),"'."))
+    }
+  }
+  if("DocEmb" %in% textrep & is.null(cs$DocEmb_word_embeddings)) stop("Provide the DocEmb_word_embeddings to use DocEmb.")
+  if("TopicModel" %in% textrep){
+    if(!all(cs$TopicModel_type %in% TopicModel_type)){
+      wrong<-paste(cs$TopicModel_type[which(!cs$TopicModel_type %in% TopicModel_type)], collapse = ", ")
+      stop(paste0("'",wrong,"' is/are not a TopicModel_type(s), choose from '",paste(TopicModel_type,collapse = ", "),"'."))
+    }
+    if(is.null(cs$TopicModel_model)){
+      stop("Provide a trained TopicModel_model.")
+    }
+  }
+
   ### Check if processing function is a function, if not null ###
-  if(!is.null(cs$preprocessor_function) & !is.function(cs$preprocessor_function)){
-    stop("The preprocessor_function is not a valid R function.")
+  if(!is.null(cs$pipe_preprocess_function) & !is.function(cs$pipe_preprocess_function)){
+    stop("The pipe_preprocess_function is not a valid R function.")
   }
+
   ### Check valid tokenizer options ###
-  tokOpts<-c("word","fasterword","fastestword","sentence","character","udpipe")
-  tokfunc<-cs$tokenizer_function
+  tokOpts<-c("word","fasterword","fastestword","sentence","character")
+  tokfunc<-cs$pipe_tokenizer_function
   if (!is.function(tokfunc) && !tokfunc %in% tokOpts){
     stop(paste0("'",tokfunc,"' is not a valid quanteda tokenizer, choose from '",paste(repOpts,collapse = ", "),"', or provide your own tokenizer as R function."))
     return(NULL)
   }
 
-  ### The observation period window ###
-  startDay<-cs$startDay
-  endDay<-cs$endDay
-
   ### check whether to create training or validation covariates ###
   # For validation provide the model's variance importance table or a dataframe with the columns covariateId and covariateName
-  if(is.null(cs$validationVarImpTable) | all(tokfunc %in% c("text2vec","lda","lsa","stm"))){
+  if(is.null(cs$BoW_validationVarImpTable) | all(cs$representations %in% c("DocEmb","TopicModel"))){
     validation <- FALSE
     valCovariateSet <- NULL
   } else {
@@ -94,19 +110,20 @@ getTritonCovariateData <- function(connection,
   idstaken<-NULL # start with no ids taken, for assigning unique random ids
 
   #========= 2. Run Feature Contruction =========#
-  ParallelLogger::logInfo(paste0("Constructing '",paste(textrep,collapse = ", "),"' covariates, during day '",startDay,
-                                 "' through '",endDay,"' days relative to index."))
+  ParallelLogger::logInfo(paste0("Constructing '",paste(textrep,collapse = ", "),"' covariates, during day '",cs$startDay,
+                                 "' through '",cs$endDay,"' days relative to index."))
 
   ### 2.1 Import the cohort's notes from OMOP CDM ###
   # SQl to get the Notes
   notes <- Triton:::importNotesFromCohort(connection,
-                                          cdmDatabaseSchema,
+                                          cs$note_databaseschema,
+                                          cs$note_table,
                                           cohortTable,
                                           cohortId,
                                           rowIdField,
-                                          startDay,
-                                          endDay,
-                                          cs$customWhere)
+                                          cs$startDay,
+                                          cs$endDay,
+                                          cs$note_customWhere)
 
   ### 2.2 Preprocessing the notes ###
   notes <- Triton:::preprocessNotes(notes,cs,doPar,parCores)
@@ -114,13 +131,13 @@ getTritonCovariateData <- function(connection,
   ### 2.3 Tokenization of the notes ###
   notes_tokens <- Triton:::tokenizeNotes(notes,cs,doPar,parCores)
 
-  if (length(textrep[!textrep %in% c("textstats","text2vec")])>0){
+  if (length(textrep[!textrep %in% c("TextStats","DocEmb")])>0){
 
     ## 2.3.1 Remove stopwords and regex patterns from tokens ##
     notes_tokens <- Triton:::filterTokens(notes_tokens,cs)
 
     ## 2.3.2 create ngrams if requested ##
-    if (max(cs$ngrams)>1){
+    if (max(cs$pipe_ngrams)>1){
       notes_tokens <- Triton:::createNgrams(notes_tokens, cs)
     }
 
@@ -142,58 +159,58 @@ getTritonCovariateData <- function(connection,
     }
 
     ## 2.4.3 save the vocabulary if requested ##
-    if(cs$saveVocab){
+    if(cs$pipe_saveVocab){
       vocab<-quanteda::textstat_frequency(notes_dfm_trimmed)
-      saveRDS(vocab, file = paste0(cs$outputFolder,"/vocabfile.rds"))
+      saveRDS(vocab, file = paste0(cs$pipe_outputFolder,"/vocabfile.rds"))
     }
   }
 
   #========= 3. Build the covariates =========#
   ### 3.1 Build general text statistics
-  if("textstats" %in% textrep){
+  if("TextStats" %in% textrep){
     ParallelLogger::logInfo("\tCreating descriptive statistic covariates")
     DTM_STATS <- Triton:::getTextStats(notes_tokens)
-    tempCovariates <- toCovariateData(DTM_STATS,"textstats", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
-    covariates <- appendCovariateData(tempCovariates,covariates)
+    tempCovariates <- Triton:::toCovariateData(DTM_STATS,"textstats",cs,idstaken,valCovariateSet)
+    covariates <- Triton:::appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
   ### 3.2  Build the TB covariates (Using DTM) ###
-  if("tb" %in% textrep){
+  if("BoW" %in% textrep & "binary" %in% cs$BoW_type){
     ParallelLogger::logInfo("\tCreating TB covariates")
     DTM_TB <- tidytext::tidy(quanteda::convert(notes_dfm_trimmed, to = "tm")) %>%
       dplyr::rename(rowId=document, word=term, tb=count)%>%
       dplyr::mutate(tb=as.numeric(tb>0)) # make binary from frequency
-    tempCovariates <- toCovariateData(DTM_TB,"tb", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
-    covariates <- appendCovariateData(tempCovariates,covariates)
+    tempCovariates <- Triton:::toCovariateData(DTM_TB,"tb",cs,idstaken,valCovariateSet)
+    covariates <- Triton:::appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
   ### 3.3  Build the TF covariates (Using DTM) ###
-  if("tf" %in% textrep){
+  if("BoW" %in% textrep & "frequency" %in% cs$BoW_type){
     ParallelLogger::logInfo("\tCreating TF covariates")
     DTM_TF <- tidytext::tidy(quanteda::convert(notes_dfm_trimmed, to = "tm")) %>%
       dplyr::rename(rowId=document, word=term, tf=count)
-    tempCovariates <- toCovariateData(DTM_TF,"tf", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
-    covariates <- appendCovariateData(tempCovariates,covariates)
+    tempCovariates <- Triton:::toCovariateData(DTM_TF,"tf",cs,idstaken,valCovariateSet)
+    covariates <- Triton:::appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
   ### 3.4 Build the TFIDF covariates (Using DTM) ###
-  if("tfidf" %in% textrep){
+  if("BoW" %in% textrep & "tfidf" %in% cs$BoW_type){
     ParallelLogger::logInfo("\tCreating TFIDF covariates")
     DTM_TFIDF <- quanteda::dfm_tfidf(notes_dfm_trimmed, scheme_tf = "count", base=10)
     DTM_TFIDF <- suppressWarnings(tidytext::tidy(quanteda::convert(DTM_TFIDF, to = "tm")) %>%
                                     dplyr::rename(rowId=document, word=term, tfidf=count))
-    tempCovariates <- toCovariateData(DTM_TFIDF, "tfidf", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
-    covariates <- appendCovariateData(tempCovariates,covariates)
+    tempCovariates <- Triton:::toCovariateData(DTM_TFIDF, "tfidf",cs,idstaken,valCovariateSet)
+    covariates <- Triton:::appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
   ### 3.5 Apply the LDA topic model covariates (Using DTM) ###
-  if("lda" %in% textrep){
+  if("TopicModel" %in% textrep & "lda" %in% cs$TopicModel_type){
     ParallelLogger::logInfo("\tCreating LDA topic model covariates")
-    lda<-get(cs$lda_model)
+    lda<-get(cs$TopicModel_model)
     ## predicting on new data
     #TODO
     newdfm <- quanteda::dfm_match(notes_dfm_trimmed,)
@@ -202,15 +219,15 @@ getTritonCovariateData <- function(connection,
       tibble::rownames_to_column("rowId") %>%
       tidyr::gather("word","lda",-rowId) %>%
       dplyr::mutate(word=paste0("lda",word))
-    tempCovariates <- toCovariateData(DM_LDA, "lda", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
-    covariates <- appendCovariateData(tempCovariates,covariates)
+    tempCovariates <- Triton:::toCovariateData(DM_LDA, "lda",cs,idstaken,valCovariateSet)
+    covariates <- Triton:::appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
   ### 3.6 Apply the STM topic model covariates (Using DTM) ###
-  if("stm" %in% textrep){
+  if("TopicModel" %in% textrep & "stm" %in% cs$TopicModel_type){
     ParallelLogger::logInfo("\tCreating STM topic model covariates")
-    stm<-get(cs$stm_model)
+    stm<-get(cs$TopicModel_model)
     ## predicting on new data
     #TODO
     newdfm <- quanteda::dfm_match(notes_dfm_trimmed,)
@@ -218,15 +235,15 @@ getTritonCovariateData <- function(connection,
     DTM_STM <- tidytext::tidy(stmNew, matrix = "gamma") %>%
       dplyr::rename(rowId=document, word=topic, lda=gamma) %>%
       dplyr::mutate(word=paste0("stmtopic",word))
-    tempCovariates <- toCovariateData(DTM_LDA, "lda", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
-    covariates <- appendCovariateData(tempCovariates,covariates)
+    tempCovariates <- Triton:::toCovariateData(DTM_LDA, "lda",cs,idstaken,valCovariateSet)
+    covariates <- Triton:::appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
   ### 3.7 Apply the LSA model covariates (Using DTM) ###
-  if("lsa" %in% textrep){
+  if("TopicModel" %in% textrep & "lsa" %in% cs$TopicModel_type){
     ParallelLogger::logInfo("\tCreating LSA topic model covariates")
-    lsa<-get(cs$lsa_model)
+    lsa<-get(cs$TopicModel_model)
     ## predicting on new data
     newdfm <- quanteda::dfm_match(notes_dfm_trimmed,quanteda::featnames(lsa$data))
     lsaNew <- predict(lsa,newdfm)
@@ -235,15 +252,15 @@ getTritonCovariateData <- function(connection,
       tibble::rownames_to_column("rowId") %>%
       tidyr::gather("word","lsa",-rowId) %>%
       dplyr::mutate(word=paste0("lsa",word))
-    tempCovariates <- toCovariateData(DM_LSA, "lsa", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
-    covariates <- appendCovariateData(tempCovariates,covariates)
+    tempCovariates <- Triton:::toCovariateData(DM_LSA, "lsa",cs,idstaken,valCovariateSet)
+    covariates <- Triton:::appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 
   ### 3.8 Build aggregated word embedding covariates (using tokens and word embeddings)
-  if("text2vec" %in% textrep){
+  if("DocEmb" %in% textrep){
     ParallelLogger::logInfo("\tCreating text2vec covariates")
-    wordsInEmb<-rownames(get(cs$t2v_word_embedding))
+    wordsInEmb<-rownames(get(cs$DocEmb_word_embeddings, envir = .GlobalEnv))
     ParallelLogger::logInfo("\t\tLimit tokens to embedding terms")
     t0<-Sys.time()
     if(doPar) notes_tokens_filt<-parallel::mclapply(notes_tokens,Triton:::selectEmbTerms,wordsInEmb=wordsInEmb,mc.cores = parCores)
@@ -251,8 +268,8 @@ getTritonCovariateData <- function(connection,
     ParallelLogger::logInfo(paste0("\t\t",round(difftime(Sys.time(),t0, units = 'min'),2)," min"))
     ParallelLogger::logInfo("\t\tAggregating word embeddings")
     t0<-Sys.time()
-    if(doPar) notes_embedded<-parallel::mclapply(notes_tokens_filt,Triton:::aggrNoteEmbedding,wordEmb=get(cs$t2v_word_embedding),mc.cores = parCores)
-    if(!doPar) notes_embedded<-lapply(notes_tokens_filt,Triton:::aggrNoteEmbedding,wordEmb=get(cs$t2v_word_embedding))
+    if(doPar) notes_embedded<-parallel::mclapply(notes_tokens_filt,Triton:::aggrNoteEmbedding,wordEmb=get(cs$DocEmb_word_embeddings, envir = .GlobalEnv),mc.cores = parCores)
+    if(!doPar) notes_embedded<-lapply(notes_tokens_filt,Triton:::aggrNoteEmbedding,wordEmb=get(cs$DocEmb_word_embeddings, envir = .GlobalEnv))
     ParallelLogger::logInfo("\t\tNote embeddings created")
     ParallelLogger::logInfo(paste0("\t\t",round(difftime(Sys.time(),t0, units = 'min'),2)," min"))
     notes_embedded<-data.frame(do.call(rbind, notes_embedded))
@@ -260,8 +277,8 @@ getTritonCovariateData <- function(connection,
     DTM_T2V<-notes_embedded %>%
       tibble::rownames_to_column("rowId") %>%
       tidyr::gather("word","t2v",2:ncol(.))
-    tempCovariates <- toCovariateData(DTM_T2V,"t2v", startDay,endDay,idstaken,valCovariateSet,cs$idrange)
-    covariates <- appendCovariateData(tempCovariates,covariates)
+    tempCovariates <- Triton:::toCovariateData(DTM_T2V,"t2v",cs,idstaken,valCovariateSet)
+    covariates <- Triton:::appendCovariateData(tempCovariates,covariates)
     idstaken <- c(idstaken,as.data.frame(covariates$covariateRef)$covariateId)
   }
 

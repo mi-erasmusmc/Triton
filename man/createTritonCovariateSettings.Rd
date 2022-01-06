@@ -5,92 +5,99 @@
 \title{createTritonCovariateSettings}
 \usage{
 createTritonCovariateSettings(
-  useTextData = TRUE,
+  useNoteData = TRUE,
   startDay = -30,
   endDay = 0,
-  preprocessor_function = NULL,
-  tokenizer_function = "word",
-  stopwords = NULL,
-  custom_pruning_regex = NULL,
-  ngrams = 1,
-  vocab_term_max = Inf,
-  term_count_min = 50,
-  term_count_max = Inf,
-  doc_count_min = 50,
-  doc_count_max = Inf,
-  doc_proportion_max = 0.5,
-  doc_proportion_min = 0.001,
-  representations = c("tb"),
-  t2v_word_embeddings = NULL,
-  lda_model = NULL,
-  lsa_model = NULL,
-  stm_model = NULL,
   idrange = NULL,
-  outputFolder = NULL,
-  parallel = TRUE,
-  saveVocab = FALSE,
+  parallel = FALSE,
+  analysisId = 999,
+  note_databaseschema = "cdm",
+  note_tablename = "note",
+  note_customWhere = "",
+  pipe_preprocess_function = NULL,
+  pipe_tokenizer_function = "word",
+  pipe_ngrams = 1,
+  pipe_saveVocab = FALSE,
+  pipe_outputFolder = NULL,
+  filter_stopwords = NULL,
+  filter_custom_regex = NULL,
+  filter_vocab_term_max = Inf,
+  filter_term_count_min = 50,
+  filter_term_count_max = Inf,
+  filter_doc_count_min = 50,
+  filter_doc_count_max = Inf,
+  filter_doc_proportion_max = 0.5,
+  filter_doc_proportion_min = 0.001,
+  representations = c("TextStats"),
+  BoW_type = c("binary"),
+  BoW_validationVarImpTable = NULL,
+  DocEmb_word_embeddings = NULL,
+  TopicModel_type = c("lsa"),
+  TopicModel_model = NULL,
   covariateDataSave = "",
-  covariateDataLoad = "",
-  customWhere = "",
-  validationVarImpTable = NULL
+  covariateDataLoad = ""
 )
 }
 \arguments{
-\item{useTextData}{logical; option to disable the creation of text representation covariates.}
-
 \item{startDay}{integer; start day before the index date for with the text representations have to be computed.}
 
 \item{endDay}{integer; end day before the index date for with the text representations have to be computed.}
 
-\item{preprocessor_function}{function; to preprocess the stings before tokenization. Default is \code{\link{tolower}}.}
-
-\item{tokenizer_function}{character or function; to tokenize the strings. Default is quanteda tokenizer (\code{\link[quanteda]{tokens}}), with argument "word". Other possible arguments are "fasterword", "fastestword", "sentence", and "character". It is also possible to provide a custom tokenizer function. This function should take the document strings as input and should return a list of character vectors (tokens).}
-
-\item{stopwords}{character vector; of list of stopwords that will be removed. Default is NULL. See \code{\link[stopwords]{stopwords}} for generating stopwords.}
-
-\item{custom_pruning_regex}{(optional) character; regular expression (regex) that selects tokens that will be removed. Default is \code{NULL}.}
-
-\item{ngrams}{integer vector; specifying the number of elements to be concatenated in each ngram. For example: \code{c(1,2)} creates all unigrams and bigrams; \code{c(1:3)} creats all unigrams, bigrams, and trigrams. Default is 1: no ngrams (unigram).}
-
-\item{vocab_term_max}{integer; maximum number of terms in vocabulary, takes top most frequent terms. Default is \code{Inf}.}
-
-\item{term_count_min}{integer; minimum number of occurences over all documents.}
-
-\item{term_count_max}{integer; maximum number of occurences over all documents.Default is \code{Inf}.}
-
-\item{doc_count_min}{integer; term will be kept when number of documents that contain this term is larger than this value.}
-
-\item{doc_count_max}{integer; term will be kept when number of documents that contain this term is lower than this value. Default is \code{Inf}.}
-
-\item{doc_proportion_max}{numeric; maximum proportion (0.-1.) of documents which should contain term.}
-
-\item{doc_proportion_min}{numeric; minimum proportion (0.-1.) of documents which should contain term.}
-
-\item{representations}{character vector; of text representations that should be constructed, chose from \code{"tf"} and \code{"tfidf"}. Multiple representations can be constructed at once: \code{c("tf","tfidf")}.}
-
-\item{t2v_word_embeddings}{(optional) character; of a data.frame loaded in the R environment that contains the word embeddings. First column must contain the word, the other n-1 columns contain the embedding values.}
-
-\item{lda_model}{(optional) character; name of a data.frame loaded in the R environment that contains a lda model object.}
-
-\item{lsa_model}{(optional) character; name of a data.frame loaded in the R environment that contains a lsa model object.}
-
-\item{stm_model}{(optional) character; name of a data.frame loaded in the R environment that contains a stm model object.}
-
 \item{idrange}{(optional) integer vector; specifying the range of integers that can be used to generate the covariateids, max is 2147482. Default is c(1,2147482).}
-
-\item{outputFolder}{(optional) character; file path and name for saving output files. Default is \code{NULL}.}
 
 \item{parallel}{logical; to indicate whether multi-threading should be used. Default is True.}
 
-\item{saveVocab}{logical; option to save the generated vocabulary as rds file in the outputFolder.}
+\item{note_databaseschema}{t}
+
+\item{note_tablename}{t}
+
+\item{note_customWhere}{(optional) character; with a SQL where statement to filter the note import. Example "WHERE note_source_value='communication'".}
+
+\item{pipe_preprocess_function}{function; to preprocess the stings before tokenization. Default is \code{\link{tolower}}.}
+
+\item{pipe_tokenizer_function}{character or function; to tokenize the strings. Default is quanteda tokenizer (\code{\link[quanteda]{tokens}}), with argument "word". Other possible arguments are "fasterword", "fastestword", "sentence", and "character". It is also possible to provide a custom tokenizer function. This function should take the document strings as input and should return a list of character vectors (tokens).}
+
+\item{pipe_ngrams}{integer vector; specifying the number of elements to be concatenated in each ngram. For example: \code{c(1,2)} creates all unigrams and bigrams; \code{c(1:3)} creats all unigrams, bigrams, and trigrams. Default is 1: no ngrams (unigram).}
+
+\item{pipe_saveVocab}{logical; option to save the generated vocabulary as rds file in the outputFolder.}
+
+\item{pipe_outputFolder}{(optional) character; file path and name for saving output files. Default is \code{NULL}.}
+
+\item{filter_stopwords}{character vector; of list of stopwords that will be removed. Default is NULL. See \code{\link[stopwords]{stopwords}} for generating stopwords.}
+
+\item{filter_custom_regex}{(optional) character; regular expression (regex) that selects tokens that will be removed. Default is \code{NULL}.}
+
+\item{filter_vocab_term_max}{integer; maximum number of terms in vocabulary, takes top most frequent terms. Default is \code{Inf}.}
+
+\item{filter_term_count_min}{integer; minimum number of occurences over all documents.}
+
+\item{filter_term_count_max}{integer; maximum number of occurences over all documents.Default is \code{Inf}.}
+
+\item{filter_doc_count_min}{integer; term will be kept when number of documents that contain this term is larger than this value.}
+
+\item{filter_doc_count_max}{integer; term will be kept when number of documents that contain this term is lower than this value. Default is \code{Inf}.}
+
+\item{filter_doc_proportion_max}{numeric; maximum proportion (0.-1.) of documents which should contain term.}
+
+\item{filter_doc_proportion_min}{numeric; minimum proportion (0.-1.) of documents which should contain term.}
+
+\item{representations}{character vector; of text representations that should be constructed, chose from \code{"tf"} and \code{"tfidf"}. Multiple representations can be constructed at once: \code{c("tf","tfidf")}.}
+
+\item{BoW_type}{t}
+
+\item{BoW_validationVarImpTable}{(optional) data.frame; used for validation of a model with bag-of-word covariates. A varImp data.frame with the covariate names and covariate values of a trained model. The varImp data.frame can be found in plpResult$model$varImp or plpModel$varImp.}
+
+\item{DocEmb_word_embeddings}{(optional) character; of a data.frame loaded in the R environment that contains the word embeddings. First column must contain the word, the other n-1 columns contain the embedding values.}
+
+\item{TopicModel_type}{t}
+
+\item{TopicModel_model}{character; name of a topic model object loaded in the R environment.}
 
 \item{covariateDataSave}{(optional) character; location and file name of where the created covariateData must be stored.}
 
 \item{covariateDataLoad}{(optional) character; location and file name of where the created covariateData must be loaded from. Anything else is ignored, just the covariateData is loaded and returned.}
 
-\item{customWhere}{(optional) character; with a SQL where statement to filter the note import. Example "WHERE note_source_value='communication'".}
-
-\item{validationVarImpTable}{(optional) data.frame; used for validation. A varImp data.frame with the covariate names and covariate values of a trained model. The varImp data.frame can be found in plpResult$model$varImp or plpModel$varImp.}
+\item{useTextData}{logical; option to disable the creation of text representation covariates.}
 }
 \value{
 covariateSettings object, that can be used by the OHDSI FeatureExtraction package.
