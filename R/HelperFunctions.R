@@ -58,17 +58,3 @@ appendCovariateData<- function(tempCovariateData,covariateData){
   }
   return(covariateData)
 }
-
-selectEmbTerms<-function(toks,wordsInEmb){
-  ##==## Select the terms in the tokens that are also in the embedding ##==##
-  toks<-toks[toks %in% wordsInEmb]
-  return(toks)
-}
-
-aggrNoteEmbedding<-function(toks,wordEmb){
-  ##==## Aggregate over word embeddings to create a note embedding ##==##
-  noteEmb<-wordEmb[toks,]
-  noteEmb<-noteEmb[complete.cases(noteEmb),]
-  noteEmb<-colSums(noteEmb)/length(toks)
-  return(noteEmb)
-}

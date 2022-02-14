@@ -16,7 +16,9 @@ createNotenlpCovariateSettings(
   filter_select_domains = "",
   filter_include_nonexist = FALSE,
   filter_include_temporal = FALSE,
-  filter_only_standard = FALSE
+  filter_only_standard = FALSE,
+  covariateDataSave = "",
+  covariateDataLoad = ""
 )
 }
 \description{

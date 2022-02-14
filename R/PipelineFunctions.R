@@ -1,5 +1,5 @@
 importNotesFromCohort<- function(connection,
-                                 note_databaseschema,
+                                 cdmDatabaseSchema,
                                  note_table,
                                  cohortTable,
                                  cohortId,
@@ -15,7 +15,7 @@ importNotesFromCohort<- function(connection,
                                               cohort_table = cohortTable,
                                               cohort_id = cohortId,
                                               row_id_field = rowIdField,
-                                              note_database_schema = note_databaseschema,
+                                              note_database_schema = cdmDatabaseSchema,
                                               note_table = note_table,
                                               startDay = startDay,
                                               endDay = endDay,
@@ -148,7 +148,7 @@ trimDFM<-function(notes_dfm, cs){
   notes_dfm_trimmed <- quanteda::dfm_trim(notes_dfm_trimmed,
                                           min_docfreq = cs$filter_doc_proportion_min, max_docfreq=cs$filter_doc_proportion_max, docfreq_type='prop')
   ParallelLogger::logInfo(paste0("\t\tDTM: ",quanteda::ndoc(notes_dfm_trimmed)," rowIds x ",quanteda::nfeat(notes_dfm_trimmed)," words, Memory: ",format(utils::object.size(notes_dfm_trimmed), units = "auto")))
-  if(!is.infinite(cs$filter_vocab_term_max)){
+  if(!is.null(cs$filter_vocab_term_max)){
     ParallelLogger::logInfo("\t\tTrimming DTM based on max number of terms")
     notes_dfm_trimmed <- quanteda::dfm_trim(notes_dfm_trimmed,
                                             max_termfreq = cs$filter_vocab_term_max, docfreq_type='rank')

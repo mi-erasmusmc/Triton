@@ -76,21 +76,9 @@ notes_dfm <- Triton:::createDFM(notes_tokens)
 # trim dfm
 notes_dfm_trimmed <- Triton:::trimDFM(notes_dfm, cs)
 
-## create lda topic model ##
-lda<-Triton:::trainLDA(notes_dfm_trimmed,k = 10,filename = "output/textmodels/ldaModel.rds",verbose = T)
-ldaCov<-data.frame(lda$theta)
-# predict on new data
-new<-predict(lda, notes_dfm_trimmed)
-
-## create stm topic model ##
-stm<-Triton:::trainSTM(notes_dfm_trimmed,k = 10,filename = "output/textmodels/stmModel.rds",verbose = T)
-stmCov<-tidytext::tidy(stm, matrix = "gamma")
-# predict on new data
-stmNew<-stm::fitNewDocuments(stm, documents= notes_dfm_trimmed@docvars$docname_,newData = notes_dfm_trimmed)
-
 ## create lsa topic model ##
 lsa<-Triton:::trainLSA(notes_dfm_trimmed,k = 10,filename = "output/textmodels/lsaModel.rds",tfidf = T)
-lsaCov<-as.data.frame(lsa$docs)
+# Get topics
+lsaPred <- as.data.frame(lsa$docs)
 # predict on new data
-lsaNew<-predict(lsa,notes_dfm_trimmed)
-lsaRes <- data.frame(as.matrix(lsaNew$docs_newspace))
+lsaPredNew <- predictLSA(lsa,notes_dfm_trimmed)

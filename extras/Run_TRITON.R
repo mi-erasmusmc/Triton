@@ -17,6 +17,7 @@ dir.create(outputFolder, showWarnings = FALSE) # Create folder if does not exist
 #=== Custom preprocessing function example ===#
 custom_preprocessing<-function(string){
   res<-tolower(string)# Text to lower case
+  res<-stringr::str_replace_all(res,"\\\\n", " ") # remove new lines
   res<-stringr::str_replace_all(res,"[0-9]+", " ") # remove numbers
   res<-stringr::str_replace_all(res,"_+", " ") # remove all under scores
   return(res)
@@ -44,32 +45,45 @@ custom_tokenizer(unlist(lapply(text, custom_preprocessing)))
 #===============================================
 #  Create the text representation settings
 #===============================================
-triton_covariateSettings <- Triton::createTextRepCovariateSettings(
-  useTextData = TRUE,
-  startDay = -365,
-  endDay = 0,
-  preprocessor_function = custom_preprocessing,
-  tokenizer_function = custom_tokenizer,
-  stopwords = stopwords::stopwords("en"),
-  custom_pruning_regex = "(-+)|(hydro[a-z]+)", # (example) remove all minus signs and all words starting with "hydro"
-  ngrams = 1:2,
-  vocab_term_max = Inf,
-  term_count_min = 50,
-  term_count_max = Inf,
-  doc_count_min = 50,
-  doc_count_max = Inf,
-  doc_proportion_max = 0.5,
-  doc_proportion_min = 0.005,
-  representations = c("tf","tfidf"), # list of representations to be generated
-  outputFolder = outputFolder, # Provide output location and to save vocab and other info, otherwise NULL.
-  idrange = c(1,2000000),
-  parallel = TRUE,
-  saveVocab = TRUE,
-  validationVarImpTable = NULL)
+triton_covariateSettings <- Triton::createTritonCovariateSettings(
+  # GENERAL SETTINGS
+  useNoteData = TRUE,
+  startDay = -30,
+  endDay = -1,
+  idrange = c(1,1000000),
+  parallel = FALSE,
+  analysisId = 999,
+  # NOTE TABLE SETTINGS
+  note_databaseschema = NULL, #default keep same as cdm
+  note_tablename = "note", #default keep same as in cdm
+  note_customWhere = "",
+  # PIPELINE SETTINGS
+  pipe_preprocess_function = custom_preprocessing,
+  pipe_tokenizer_function = custom_tokenizer,
+  pipe_ngrams = 1,
+  pipe_saveVocab = FALSE,
+  pipe_outputFolder = outputFolder,
+  # OPTIONAL: TERM FILTER SETTINGS
+  filter_stopwords = NULL,
+  filter_custom_regex = NULL,
+  filter_vocab_term_max = NULL,
+  filter_term_count_min = NULL,
+  filter_term_count_max = NULL,
+  filter_doc_count_min = NULL,
+  filter_doc_count_max = NULL,
+  filter_doc_proportion_max = NULL,
+  filter_doc_proportion_min = NULL,
+  # REPRESENTATION SETTINGS
+  representations = c("BoW_bin","TextStats"),  # choose from "BoW_bin","BoW_freq","BoW_tfidf","WordEmb_avg","WordEmb_sum","TopicModel_lsa","TextStats"
+  BoW_validationVarImpTable = NULL, #Required for validation
+  Word_embeddings = NULL, #Required for WordEmb
+  TopicModel_file = NULL, #Required for TopicModel
+  # OPTIONAL: SAVING AND LOADING
+  covariateDataSave="",
+  covariateDataLoad="")
 
 # The triton_covariateSettings can now be used within the OHDSI framework.
 # For example in the PatientLevelPrediction package.
-
 
 #===========================================================================
 # Construct the covariates using FeatureExtraction package from a CDM cohort
